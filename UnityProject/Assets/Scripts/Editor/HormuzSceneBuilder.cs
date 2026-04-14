@@ -22,9 +22,9 @@ namespace HormuzAI.Editor
         private const string HEIGHTMAP_META   = "Terrain/heightmap_meta.txt";
 
         // ── Terrain 규격 ────────────────────────────────────
-        private const float TERRAIN_W  = 40000f;   // 40 km (X)
-        private const float TERRAIN_H  = 500f;     // 고도 범위 (Y)
-        private const float TERRAIN_D  = 20000f;   // 20 km (Z)
+        private const float TERRAIN_W  = 56000f;   // 56 km (X, 페르시아만→오만만 전체 수로)
+        private const float TERRAIN_H  = 2000f;    // 고도 범위 (Y, 시각적 과장 ×4)
+        private const float TERRAIN_D  = 40000f;   // 40 km (Z)
         private const int   HM_RES     = 1025;     // heightmapResolution (2ⁿ + 1)
         // ───────────────────────────────────────────────────
 
@@ -193,10 +193,10 @@ namespace HormuzAI.Editor
             spawnRoot.transform.SetParent(parent.transform);
             spawnRoot.AddComponent<SpawnManager>();
 
-            // SpawnPoint_0: 서쪽 입구, 수로 중앙
+            // SpawnPoint_0: 북서쪽 (페르시아만 입구, 지도 좌상단)
             var sp0 = new GameObject("SpawnPoint_0");
             sp0.transform.SetParent(spawnRoot.transform);
-            sp0.transform.position = new Vector3(1000f, seaY + 1f, TERRAIN_D / 2f);
+            sp0.transform.position = new Vector3(1000f, seaY + 1f, TERRAIN_D - 1000f);
         }
 
         // ── GoalTrigger ────────────────────────────────────
@@ -206,7 +206,7 @@ namespace HormuzAI.Editor
             var goal = new GameObject("GoalTrigger");
             goal.tag = "Goal";
             goal.transform.SetParent(parent.transform);
-            goal.transform.position = new Vector3(TERRAIN_W - 1000f, seaY + 10f, TERRAIN_D / 2f);
+            goal.transform.position = new Vector3(TERRAIN_W - 1000f, seaY + 10f, 1000f);
 
             var col = goal.AddComponent<BoxCollider>();
             col.isTrigger = true;

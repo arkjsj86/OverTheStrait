@@ -2,38 +2,37 @@
 """
 Hormuz Strait Heightmap Generator
 
-Downloads Copernicus DEM 90m tile (publicly accessible, no auth required)
-and converts to Unity Terrain 16-bit RAW heightmap.
+Downloads Copernicus DEM 90m tiles (publicly accessible, no auth required),
+merges them, and converts to Unity Terrain 16-bit RAW heightmap.
 
 Usage:
     python generate_heightmap.py            # 자동 다운로드 (Copernicus DEM)
     python generate_heightmap.py input.tif  # 기존 GeoTIFF 사용
 """
 
+import math
 import os
 import sys
+import shutil
 import requests
 import numpy as np
 import rasterio
-from rasterio.windows import from_bounds
+from rasterio.merge import merge as rasterio_merge
 from PIL import Image
 
 # ── 설정 ─────────────────────────────────────────────────────
-WEST, SOUTH, EAST, NORTH = 56.05, 26.35, 56.50, 26.75
-HEIGHTMAP_SIZE = (1025, 1025)  # Unity heightmapResolution = 1025 → 정사각형
+# S(스타트: 페르시아만) → E(엔드: 오만만) 전체 구간
+WEST, SOUTH, EAST, NORTH = 50.0, 22.0, 58.5, 27.5
+HEIGHTMAP_SIZE = (1025, 1025)  # Unity heightmapResolution = 1025
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 OUTPUT_RAW   = os.path.join(PROJECT_ROOT, "UnityProject", "Assets", "Terrain", "heightmap_hormuz.raw")
 OUTPUT_META  = os.path.join(PROJECT_ROOT, "UnityProject", "Assets", "Terrain", "heightmap_meta.txt")
-TMP_TIF      = os.path.join(SCRIPT_DIR, "tmp_hormuz_dem.tif")
+TMP_DIR      = os.path.join(SCRIPT_DIR, "tmp_tiles")
 
-# Copernicus DEM 90m — tile N26E056 (26°-27°N, 56°-57°E), AWS S3 공개 버킷
-COPERNICUS_TILE_URL = (
-    "https://copernicus-dem-90m.s3.amazonaws.com/"
-    "Copernicus_DSM_COG_30_N26_00_E056_00_DEM/"
-    "Copernicus_DSM_COG_30_N26_00_E056_00_DEM.tif"
-)
+TILE_LIST_URL = "https://copernicus-dem-90m.s3.amazonaws.com/tileList.txt"
+TILE_BASE_URL = "https://copernicus-dem-90m.s3.amazonaws.com"
 # ─────────────────────────────────────────────────────────────
 
 
@@ -52,9 +51,8 @@ def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
     max_val = float(data.max())
     span = (max_val - min_val) or 1.0
 
-    normalized = ((data - min_val) / span).astype(np.float32)  # 0.0 ~ 1.0
+    normalized = ((data - min_val) / span).astype(np.float32)
 
-    # PIL mode='F' (32-bit float) 로 LANCZOS 리샘플링
     img = Image.fromarray(normalized, mode='F')
     img = img.resize((target_size[1], target_size[0]), Image.LANCZOS)
     resampled = np.array(img, dtype=np.float32)
@@ -62,32 +60,103 @@ def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
     return (np.clip(resampled, 0.0, 1.0) * 65535).astype(np.uint16)
 
 
-def download_dem(output_tif: str) -> None:
-    """Copernicus DEM 90m 타일을 AWS S3 공개 버킷에서 다운로드."""
-    print("Copernicus DEM 다운로드 중 (AWS S3)...")
-    resp = requests.get(COPERNICUS_TILE_URL, stream=True, timeout=180)
+def fetch_tile_list() -> set:
+    """Copernicus DEM tileList.txt 다운로드 후 파싱."""
+    print("타일 목록 가져오는 중...")
+    resp = requests.get(TILE_LIST_URL, timeout=30)
     resp.raise_for_status()
-    with open(output_tif, "wb") as f:
+    tiles = set(resp.text.splitlines())
+    print(f"총 {len(tiles)}개 타일 확인됨")
+    return tiles
+
+
+def tile_name(lat: int, lon: int) -> str:
+    """위경도 정수 좌표로 Copernicus DEM 타일 이름 생성."""
+    lat_str = f"N{lat:02d}" if lat >= 0 else f"S{abs(lat):02d}"
+    lon_str = f"E{lon:03d}" if lon >= 0 else f"W{abs(lon):03d}"
+    return f"Copernicus_DSM_COG_30_{lat_str}_00_{lon_str}_00_DEM"
+
+
+def download_tile(name: str, output_path: str) -> None:
+    """단일 타일 다운로드."""
+    url = f"{TILE_BASE_URL}/{name}/{name}.tif"
+    resp = requests.get(url, stream=True, timeout=120)
+    resp.raise_for_status()
+    with open(output_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=65536):
             f.write(chunk)
-    size_mb = os.path.getsize(output_tif) / (1024 * 1024)
-    print(f"다운로드 완료: {output_tif} ({size_mb:.1f} MB)")
 
 
-def convert_to_raw(input_tif: str, output_raw: str, output_meta: str) -> None:
-    """GeoTIFF를 Hormuz bbox로 크롭하고 Unity용 16-bit big-endian RAW로 변환."""
+def download_tiles(available_tiles: set) -> list:
+    """bbox 내 존재하는 육지 타일을 모두 다운로드하고 경로 목록 반환."""
+    os.makedirs(TMP_DIR, exist_ok=True)
+
+    lat_range = range(math.floor(SOUTH), math.ceil(NORTH))
+    lon_range = range(math.floor(WEST),  math.ceil(EAST))
+    total_cells = len(lat_range) * len(lon_range)
+
+    print(f"bbox 내 {total_cells}개 셀 확인 중 (위도 {len(lat_range)} × 경도 {len(lon_range)})...")
+
+    downloaded, skipped = [], 0
+
+    for lat in lat_range:
+        for lon in lon_range:
+            name = tile_name(lat, lon)
+            if name not in available_tiles:
+                skipped += 1  # 해양 타일 — 병합 시 0으로 처리
+                continue
+
+            out_path = os.path.join(TMP_DIR, f"{name}.tif")
+            if os.path.exists(out_path):
+                downloaded.append(out_path)
+                continue
+
+            try:
+                print(f"  다운로드: {name}", end="\r")
+                download_tile(name, out_path)
+                downloaded.append(out_path)
+            except Exception as e:
+                print(f"  경고: {name} 실패 ({e})")
+
+    print(f"\n육지 타일: {len(downloaded)}개 다운로드 / 해양 타일: {skipped}개 (0으로 처리)")
+    return downloaded
+
+
+def build_mosaic(tile_files: list) -> np.ndarray:
+    """타일 병합 → bbox 크롭 → float32 배열 반환. 해양(빈 영역)은 0."""
+    datasets = [rasterio.open(f) for f in tile_files]
+
+    mosaic, _ = rasterio_merge(
+        datasets,
+        bounds=(WEST, SOUTH, EAST, NORTH),
+        nodata=0.0,
+    )
+
+    for ds in datasets:
+        ds.close()
+
+    data = mosaic[0].astype(np.float32)
+    data = np.where(data < -100, 0.0, data)   # nodata(-9999 등) → 0
+    data = np.where(np.isnan(data), 0.0, data)
+    # rasterio는 북→남 순서로 저장, Unity는 row 0 = Z=0 (남쪽) 순서로 읽음
+    # flipud로 남→북 순서로 변환 → Unity 씬에서 북쪽(이란/페르시아만)이 상단에 위치
+    data = np.flipud(data)
+    return data
+
+
+def from_geotiff(input_tif: str) -> np.ndarray:
+    """기존 GeoTIFF에서 bbox 크롭 후 float32 배열 반환."""
+    from rasterio.windows import from_bounds
     with rasterio.open(input_tif) as ds:
         window = from_bounds(WEST, SOUTH, EAST, NORTH, ds.transform)
         data = ds.read(1, window=window).astype(np.float32)
+    return data
 
-    if data.size == 0:
-        raise ValueError(
-            f"크롭 결과가 비어 있습니다. bbox ({WEST},{SOUTH},{EAST},{NORTH})가 "
-            f"타일 범위 안에 있는지 확인하세요."
-        )
 
+def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
+    """2D float32 고도 배열을 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
     min_val, max_val = float(data.min()), float(data.max())
-    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  크롭 크기: {data.shape}")
+    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
 
     heightmap = normalize_and_resize(data, HEIGHTMAP_SIZE)
 
@@ -97,16 +166,16 @@ def convert_to_raw(input_tif: str, output_raw: str, output_meta: str) -> None:
     heightmap.byteswap().tofile(output_raw)
     print(f"RAW 저장: {output_raw}")
 
-    # 해수면 Y 계산 (Unity Terrain Height = 500)
+    UNITY_TERRAIN_H = 2000.0  # 시각적 과장 ×4 (실제 최대 ~2981m → Unity 2000m)
     span = (max_val - min_val) or 1.0
-    sea_level_y = (-min_val / span) * 500.0
+    sea_level_y = (-min_val / span) * UNITY_TERRAIN_H
 
     meta = (
         f"Width: {HEIGHTMAP_SIZE[1]}\n"
         f"Height: {HEIGHTMAP_SIZE[0]}\n"
         f"Bit Depth: 16\n"
         f"Byte Order: Mac (big-endian)\n"
-        f"Terrain Height (Unity): 500\n"
+        f"Terrain Height (Unity): {int(UNITY_TERRAIN_H)}\n"
         f"Sea Level Y (Unity): {sea_level_y:.2f}\n"
     )
     with open(output_meta, "w", encoding="utf-8") as f:
@@ -114,22 +183,26 @@ def convert_to_raw(input_tif: str, output_raw: str, output_meta: str) -> None:
     print(f"메타데이터 저장: {output_meta}")
     print(f"\nUnity Import Raw 설정:")
     print(f"  Depth: 16 bit | Width: {HEIGHTMAP_SIZE[1]} | Height: {HEIGHTMAP_SIZE[0]}")
-    print(f"  Byte Order: Mac | Terrain Size: 40000 x 500 x 20000")
+    print(f"  Byte Order: Mac | Terrain Size: 56000 x {int(UNITY_TERRAIN_H)} x 40000")
     print(f"  해수면 Y: {sea_level_y:.2f}m")
 
 
 def main() -> None:
-    input_tif = sys.argv[1] if len(sys.argv) > 1 else None
+    if len(sys.argv) > 1:
+        print(f"GeoTIFF 파일 사용: {sys.argv[1]}")
+        data = from_geotiff(sys.argv[1])
+    else:
+        available = fetch_tile_list()
+        tile_files = download_tiles(available)
 
-    if input_tif is None:
-        download_dem(TMP_TIF)
-        input_tif = TMP_TIF
+        if not tile_files:
+            raise RuntimeError("다운로드된 타일이 없습니다. 네트워크 연결을 확인하세요.")
 
-    convert_to_raw(input_tif, OUTPUT_RAW, OUTPUT_META)
+        print("타일 병합 중...")
+        data = build_mosaic(tile_files)
+        shutil.rmtree(TMP_DIR, ignore_errors=True)
 
-    if os.path.exists(TMP_TIF):
-        os.remove(TMP_TIF)
-
+    convert_to_raw(data, OUTPUT_RAW, OUTPUT_META)
     print("\n완료! Unity에서 Hormuz > Build Scene 메뉴를 실행하세요.")
 
 
