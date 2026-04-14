@@ -30,9 +30,9 @@ TMP_TIF      = os.path.join(SCRIPT_DIR, "tmp_hormuz_dem.tif")
 
 # Copernicus DEM 90m — tile N26E056 (26°-27°N, 56°-57°E), AWS S3 공개 버킷
 COPERNICUS_TILE_URL = (
-    "https://copernicus-dem-90m.s3.eu-central-1.amazonaws.com/"
-    "Copernicus_DSM_COG_10_N26_00_E056_00_DEM/"
-    "Copernicus_DSM_COG_10_N26_00_E056_00_DEM.tif"
+    "https://copernicus-dem-90m.s3.amazonaws.com/"
+    "Copernicus_DSM_COG_30_N26_00_E056_00_DEM/"
+    "Copernicus_DSM_COG_30_N26_00_E056_00_DEM.tif"
 )
 # ─────────────────────────────────────────────────────────────
 
