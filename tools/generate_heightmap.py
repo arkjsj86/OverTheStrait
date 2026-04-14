@@ -60,7 +60,7 @@ def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
 
 
 def download_gebco(output_zip: str) -> None:
-    print(f"GEBCO 데이터 다운로드 중...")
+    print("GEBCO 데이터 다운로드 중...")
     resp = requests.get(GEBCO_URL, stream=True, timeout=120)
     resp.raise_for_status()
     with open(output_zip, "wb") as f:
@@ -70,15 +70,22 @@ def download_gebco(output_zip: str) -> None:
 
 
 def extract_tif(zip_path: str, output_tif: str) -> None:
+    import tempfile
+    import shutil
     with zipfile.ZipFile(zip_path, "r") as z:
         tif_files = [n for n in z.namelist() if n.lower().endswith(".tif")]
         if not tif_files:
             raise FileNotFoundError("zip 안에 .tif 파일이 없습니다.")
-        z.extract(tif_files[0], path=os.path.dirname(output_tif))
-        extracted = os.path.join(os.path.dirname(output_tif), tif_files[0])
-        if os.path.abspath(extracted) != os.path.abspath(output_tif):
-            os.replace(extracted, output_tif)
-    print(f"추출 완료: {output_tif}")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            z.extract(tif_files[0], path=tmp_dir)
+            # find the actual extracted file (handles subdirectory paths)
+            for root, _, files in os.walk(tmp_dir):
+                for fname in files:
+                    if fname.lower().endswith(".tif"):
+                        shutil.move(os.path.join(root, fname), output_tif)
+                        print(f"추출 완료: {output_tif}")
+                        return
+    raise FileNotFoundError("추출 후 .tif 파일을 찾을 수 없습니다.")
 
 
 def convert_to_raw(input_tif: str, output_raw: str, output_meta: str) -> None:
