@@ -2,17 +2,20 @@
 """
 Hormuz Strait Heightmap Generator
 
+Downloads Copernicus DEM 90m tile (publicly accessible, no auth required)
+and converts to Unity Terrain 16-bit RAW heightmap.
+
 Usage:
-    python generate_heightmap.py            # GEBCO 자동 다운로드
+    python generate_heightmap.py            # 자동 다운로드 (Copernicus DEM)
     python generate_heightmap.py input.tif  # 기존 GeoTIFF 사용
 """
 
 import os
 import sys
-import zipfile
 import requests
 import numpy as np
 import rasterio
+from rasterio.windows import from_bounds
 from PIL import Image
 
 # ── 설정 ─────────────────────────────────────────────────────
@@ -23,13 +26,13 @@ SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 OUTPUT_RAW   = os.path.join(PROJECT_ROOT, "UnityProject", "Assets", "Terrain", "heightmap_hormuz.raw")
 OUTPUT_META  = os.path.join(PROJECT_ROOT, "UnityProject", "Assets", "Terrain", "heightmap_meta.txt")
-TMP_ZIP      = os.path.join(SCRIPT_DIR, "tmp_gebco.zip")
-TMP_TIF      = os.path.join(SCRIPT_DIR, "tmp_hormuz.tif")
+TMP_TIF      = os.path.join(SCRIPT_DIR, "tmp_hormuz_dem.tif")
 
-GEBCO_URL = (
-    "https://download.gebco.net/api/download"
-    f"?sw_lat={SOUTH}&sw_lng={WEST}&ne_lat={NORTH}&ne_lng={EAST}"
-    "&format=geotiff&layer=2023"
+# Copernicus DEM 90m — tile N26E056 (26°-27°N, 56°-57°E), AWS S3 공개 버킷
+COPERNICUS_TILE_URL = (
+    "https://copernicus-dem-90m.s3.eu-central-1.amazonaws.com/"
+    "Copernicus_DSM_COG_10_N26_00_E056_00_DEM/"
+    "Copernicus_DSM_COG_10_N26_00_E056_00_DEM.tif"
 )
 # ─────────────────────────────────────────────────────────────
 
@@ -59,41 +62,32 @@ def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
     return (np.clip(resampled, 0.0, 1.0) * 65535).astype(np.uint16)
 
 
-def download_gebco(output_zip: str) -> None:
-    print("GEBCO 데이터 다운로드 중...")
-    resp = requests.get(GEBCO_URL, stream=True, timeout=120)
+def download_dem(output_tif: str) -> None:
+    """Copernicus DEM 90m 타일을 AWS S3 공개 버킷에서 다운로드."""
+    print("Copernicus DEM 다운로드 중 (AWS S3)...")
+    resp = requests.get(COPERNICUS_TILE_URL, stream=True, timeout=180)
     resp.raise_for_status()
-    with open(output_zip, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8192):
+    with open(output_tif, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=65536):
             f.write(chunk)
-    print(f"다운로드 완료: {output_zip}")
-
-
-def extract_tif(zip_path: str, output_tif: str) -> None:
-    import tempfile
-    import shutil
-    with zipfile.ZipFile(zip_path, "r") as z:
-        tif_files = [n for n in z.namelist() if n.lower().endswith(".tif")]
-        if not tif_files:
-            raise FileNotFoundError("zip 안에 .tif 파일이 없습니다.")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            z.extract(tif_files[0], path=tmp_dir)
-            # find the actual extracted file (handles subdirectory paths)
-            for root, _, files in os.walk(tmp_dir):
-                for fname in files:
-                    if fname.lower().endswith(".tif"):
-                        shutil.move(os.path.join(root, fname), output_tif)
-                        print(f"추출 완료: {output_tif}")
-                        return
-    raise FileNotFoundError("추출 후 .tif 파일을 찾을 수 없습니다.")
+    size_mb = os.path.getsize(output_tif) / (1024 * 1024)
+    print(f"다운로드 완료: {output_tif} ({size_mb:.1f} MB)")
 
 
 def convert_to_raw(input_tif: str, output_raw: str, output_meta: str) -> None:
+    """GeoTIFF를 Hormuz bbox로 크롭하고 Unity용 16-bit big-endian RAW로 변환."""
     with rasterio.open(input_tif) as ds:
-        data = ds.read(1).astype(np.float32)
+        window = from_bounds(WEST, SOUTH, EAST, NORTH, ds.transform)
+        data = ds.read(1, window=window).astype(np.float32)
+
+    if data.size == 0:
+        raise ValueError(
+            f"크롭 결과가 비어 있습니다. bbox ({WEST},{SOUTH},{EAST},{NORTH})가 "
+            f"타일 범위 안에 있는지 확인하세요."
+        )
 
     min_val, max_val = float(data.min()), float(data.max())
-    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m")
+    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  크롭 크기: {data.shape}")
 
     heightmap = normalize_and_resize(data, HEIGHTMAP_SIZE)
 
@@ -128,15 +122,13 @@ def main() -> None:
     input_tif = sys.argv[1] if len(sys.argv) > 1 else None
 
     if input_tif is None:
-        download_gebco(TMP_ZIP)
-        extract_tif(TMP_ZIP, TMP_TIF)
+        download_dem(TMP_TIF)
         input_tif = TMP_TIF
 
     convert_to_raw(input_tif, OUTPUT_RAW, OUTPUT_META)
 
-    for f in [TMP_ZIP, TMP_TIF]:
-        if os.path.exists(f):
-            os.remove(f)
+    if os.path.exists(TMP_TIF):
+        os.remove(TMP_TIF)
 
     print("\n완료! Unity에서 Hormuz > Build Scene 메뉴를 실행하세요.")
 
