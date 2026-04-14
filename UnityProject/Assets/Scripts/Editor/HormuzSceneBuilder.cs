@@ -37,10 +37,11 @@ namespace HormuzAI.Editor
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root  = new GameObject("HormuzScene");
 
+            float seaY = ReadSeaLevel();
             CreateTerrain(root);
-            CreateWaterPlane(root);
-            CreateSpawnPoints(root);
-            CreateGoalTrigger(root);
+            CreateWaterPlane(root, seaY);
+            CreateSpawnPoints(root, seaY);
+            CreateGoalTrigger(root, seaY);
             CreateBoundaryWalls(root);
 
             EditorSceneManager.SaveScene(scene, SCENE_PATH);
@@ -147,10 +148,8 @@ namespace HormuzAI.Editor
 
         // ── WaterPlane ─────────────────────────────────────
 
-        private static void CreateWaterPlane(GameObject parent)
+        private static void CreateWaterPlane(GameObject parent, float seaY)
         {
-            float seaY = ReadSeaLevel();
-
             var water = GameObject.CreatePrimitive(PrimitiveType.Plane);
             water.name = "WaterPlane";
             water.transform.SetParent(parent.transform);
@@ -163,6 +162,8 @@ namespace HormuzAI.Editor
             {
                 color = new Color(0.08f, 0.37f, 0.68f, 1f)
             };
+            if (File.Exists(Path.Combine(Application.dataPath, "..", WATER_MAT_ASSET)))
+                AssetDatabase.DeleteAsset(WATER_MAT_ASSET);
             AssetDatabase.CreateAsset(mat, WATER_MAT_ASSET);
             water.GetComponent<Renderer>().sharedMaterial = mat;
         }
@@ -186,10 +187,8 @@ namespace HormuzAI.Editor
 
         // ── SpawnPoints ────────────────────────────────────
 
-        private static void CreateSpawnPoints(GameObject parent)
+        private static void CreateSpawnPoints(GameObject parent, float seaY)
         {
-            float seaY = ReadSeaLevel();
-
             var spawnRoot = new GameObject("SpawnPoints");
             spawnRoot.transform.SetParent(parent.transform);
             spawnRoot.AddComponent<SpawnManager>();
@@ -202,10 +201,8 @@ namespace HormuzAI.Editor
 
         // ── GoalTrigger ────────────────────────────────────
 
-        private static void CreateGoalTrigger(GameObject parent)
+        private static void CreateGoalTrigger(GameObject parent, float seaY)
         {
-            float seaY = ReadSeaLevel();
-
             var goal = new GameObject("GoalTrigger");
             goal.tag = "Goal";
             goal.transform.SetParent(parent.transform);
