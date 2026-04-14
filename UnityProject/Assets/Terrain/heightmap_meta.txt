@@ -1,0 +1,6 @@
+Width: 1025
+Height: 1025
+Bit Depth: 16
+Byte Order: Mac (big-endian)
+Terrain Height (Unity): 500
+Sea Level Y (Unity): -0.00
