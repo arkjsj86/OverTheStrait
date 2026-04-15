@@ -1,15 +1,6 @@
 {
-  "scopedRegistries": [
-    {
-      "name": "OpenUPM",
-      "url": "https://package.openupm.com",
-      "scopes": [
-        "com.unity.ml-agents"
-      ]
-    }
-  ],
   "dependencies": {
-    "com.unity.ml-agents": "2.0.1",
+    "com.unity.ml-agents": "https://github.com/Unity-Technologies/ml-agents.git?path=com.unity.ml-agents#release_20",
     "com.unity.cinemachine": "3.1.2",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.11.2",
