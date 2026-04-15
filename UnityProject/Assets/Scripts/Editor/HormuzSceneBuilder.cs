@@ -29,6 +29,15 @@ namespace HormuzAI.Editor
         private const int   HM_RES     = 1025;     // heightmapResolution (2ⁿ + 1)
         // ───────────────────────────────────────────────────
 
+        [MenuItem("Hormuz/Clear Scene")]
+        public static void ClearScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            EditorSceneManager.SaveScene(scene, SCENE_PATH);
+            AssetDatabase.Refresh();
+            Debug.Log("[HormuzSceneBuilder] 씬 초기화 완료.");
+        }
+
         [MenuItem("Hormuz/Build Scene")]
         public static void BuildScene()
         {
