@@ -20,8 +20,8 @@ if exist "%CHECKPOINT%" goto :has_checkpoint
 
 if exist "results\%RUN_ID%" (
     echo  Run folder found but no checkpoint saved yet.
-    echo  Starting fresh (previous incomplete data will be overwritten).
-    echo.
+    echo  Starting fresh ^(previous incomplete data will be overwritten^).
+    echo(
     goto :force
 )
 
