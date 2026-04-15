@@ -20,31 +20,43 @@ namespace HormuzAI.Agent
         [SerializeField] protected ShipStatsSO stats;
         [SerializeField] protected ShipType shipType;
 
+        [Header("Episode Settings")]
+        [SerializeField] float maxEpisodeTime = 150f;   // 게임 내 초 (timeScale=20 → 실제 7.5초)
+
         [Header("Sensing Thresholds")]
-        [SerializeField] float shallowThreshold = 500f;   // m
-        [SerializeField] float deepThreshold    = 1500f;  // m
-        [SerializeField] float narrowThreshold  = 3000f;  // m
-        [SerializeField] float raycastMaxDist   = 5000f;  // m
+        [SerializeField] float shallowThreshold = 500f;
+        [SerializeField] float deepThreshold    = 1500f;
+        [SerializeField] float narrowThreshold  = 3000f;
+        [SerializeField] float raycastMaxDist   = 5000f;
         [SerializeField] LayerMask sensorLayerMask = Physics.DefaultRaycastLayers;
 
         [Header("Scene References")]
-        [SerializeField] SpawnManager     spawnManager;
-        [SerializeField] Transform        goal;
+        [SerializeField] SpawnManager      spawnManager;
+        [SerializeField] Transform         goal;
         [SerializeField] GenerationManager generationManager;
+
+        // ── 마커 색상 ─────────────────────────────────────────────────────
+        static readonly Color ColorAlive   = new Color(0.1f,  1.0f,  0.35f); // 녹색 — 생존
+        static readonly Color ColorDead    = new Color(1.0f,  0.1f,  0.1f);  // 빨간색 — 충돌/타임아웃
+        static readonly Color ColorSuccess = new Color(1.0f,  0.85f, 0.0f);  // 금색 — 목표 도달
 
         // ── Private state ─────────────────────────────────────────────────
 
-        Rigidbody _rb;
-        float     _currentHealth;
-        ShipState _state;
-        float     _prevDistToGoal;
-        bool      _initialized;
-        float     _depthRatio;
-        float     _widthRatio;
+        Rigidbody    _rb;
+        float        _currentHealth;
+        ShipState    _state;
+        float        _prevDistToGoal;
+        bool         _initialized;
+        float        _depthRatio;
+        float        _widthRatio;
+        float        _episodeTimer;
+        bool         _waitingForGenReset;   // 세대 리셋 대기 중 (재스폰 억제)
+        Material     _markerMat;
+        Material     _trailMat;
+        TrailRenderer _trail;
 
         // ── Unity / ML-Agents lifecycle ───────────────────────────────────
 
-        /// <summary>AgentPopulator 등 런타임 생성기가 레퍼런스를 주입할 때 사용한다.</summary>
         public void SetRefs(SpawnManager sm, Transform g, ShipStatsSO s, GenerationManager gm)
         {
             spawnManager      = sm;
@@ -61,11 +73,30 @@ namespace HormuzAI.Agent
                             | RigidbodyConstraints.FreezeRotationZ;
             _state = ShipState.Idle;
             _initialized = true;
+
+            // 마커 / 트레일 참조 캐시
+            var markerGO = transform.Find("Marker");
+            if (markerGO != null)
+            {
+                var mr = markerGO.GetComponent<MeshRenderer>();
+                if (mr != null) _markerMat = mr.material;   // 인스턴스 복사
+            }
+            _trail = GetComponent<TrailRenderer>();
+            if (_trail != null) _trailMat = _trail.material;
         }
 
         public override void OnEpisodeBegin()
         {
             if (!_initialized) return;
+
+            // 세대 리셋 대기 중 → 재스폰하지 않고 제자리 동결
+            if (_waitingForGenReset)
+            {
+                _rb.linearVelocity  = Vector3.zero;
+                _rb.angularVelocity = Vector3.zero;
+                return;
+            }
+
             if (stats == null)
             {
                 Debug.LogError($"[ShipAgent] stats not assigned on '{name}'.", this);
@@ -73,15 +104,10 @@ namespace HormuzAI.Agent
                 return;
             }
 
-            // 이전 에피소드가 타임아웃(MaxStep)으로 종료된 경우
-            if (_state == ShipState.Navigating)
-            {
-                AddReward(-0.1f);
-                generationManager?.ReportEpisodeEnd(false, -0.1f);
-            }
-
             _currentHealth = stats.maxHealth;
             _state         = ShipState.Navigating;
+            _episodeTimer  = 0f;
+            SetMarkerColor(ColorAlive);
 
             Vector3    spawnPos = spawnManager != null
                 ? spawnManager.GetRandomSpawnPosition()
@@ -92,9 +118,6 @@ namespace HormuzAI.Agent
             _rb.linearVelocity  = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
 
-            if (goal == null)
-                Debug.LogWarning($"[ShipAgent] goal is not assigned on '{name}'.", this);
-
             _prevDistToGoal = goal != null
                 ? Vector3.Distance(transform.position, goal.position)
                 : 0f;
@@ -104,35 +127,31 @@ namespace HormuzAI.Agent
 
         public override void CollectObservations(VectorSensor sensor)
         {
-            if (!_initialized) return;
+            // 비활성 상태일 때는 0으로 채워 관측 크기 유지
+            if (!_initialized || _state == ShipState.Crashed || _state == ShipState.Success)
+            {
+                for (int i = 0; i < 9; i++) sensor.AddObservation(0f);
+                return;
+            }
 
-            // 1~3: 전방 레이캐스트 (좌 30°, 정면, 우 30°) — 0=장애물 없음, 1=바로 앞
             sensor.AddObservation(ObstacleRay(Quaternion.Euler(0, -30, 0) * transform.forward));
             sensor.AddObservation(ObstacleRay(transform.forward));
             sensor.AddObservation(ObstacleRay(Quaternion.Euler(0,  30, 0) * transform.forward));
 
-            // 4: 목표 방향 (-1~+1, 정규화된 각도차)
             Vector3 toGoal = goal != null
                 ? (goal.position - transform.position).normalized
                 : transform.forward;
             float angle = Vector3.SignedAngle(transform.forward, toGoal, Vector3.up);
             sensor.AddObservation(angle / 180f);
 
-            // 5: 현재 속도 (정규화)
             sensor.AddObservation(Mathf.Clamp01(_rb.linearVelocity.magnitude / stats.maxSpeed));
 
-            // 6: 수심 비율 (0=얕음, 1=깊음)
             _depthRatio = GetDepthRatio();
             _widthRatio = GetWidthRatio();
             sensor.AddObservation(_depthRatio);
-
-            // 7: 수로폭 비율 (0=좁음, 1=넓음)
             sensor.AddObservation(_widthRatio);
 
-            // 8: 체력 비율
             sensor.AddObservation(_currentHealth / stats.maxHealth);
-
-            // 9: 함선 타입 (0=Korea, 0.5=Japan, 1=China)
             sensor.AddObservation((float)shipType / 2f);
         }
 
@@ -143,8 +162,16 @@ namespace HormuzAI.Agent
             if (!_initialized) return;
             if (_state != ShipState.Navigating) return;
 
-            float throttle = actions.ContinuousActions[0]; // -1 ~ +1
-            float steering = actions.ContinuousActions[1]; // -1 ~ +1
+            // 타임아웃 체크
+            _episodeTimer += Time.fixedDeltaTime;
+            if (_episodeTimer >= maxEpisodeTime)
+            {
+                HandleDeath(false, -0.1f);
+                return;
+            }
+
+            float throttle = actions.ContinuousActions[0];
+            float steering = actions.ContinuousActions[1];
 
             float depthRatio  = _depthRatio;
             float widthRatio  = _widthRatio;
@@ -153,7 +180,6 @@ namespace HormuzAI.Agent
             float speed    = stats.GetEffectiveSpeed(depthRatio, healthRatio);
             float turnRate = stats.GetEffectiveTurnRate(widthRatio);
 
-            // [-1,+1] → [0,1] 재매핑: 어떤 출력값이든 항상 전진
             float clampedThrottle = (throttle + 1f) * 0.5f;
             _rb.linearVelocity = Vector3.Lerp(
                 _rb.linearVelocity,
@@ -161,10 +187,8 @@ namespace HormuzAI.Agent
                 Time.fixedDeltaTime * 5f);
             transform.Rotate(Vector3.up, steering * turnRate * 45f * Time.fixedDeltaTime);
 
-            // 매 스텝 소량 감점 — 정지 패널티 + 빠른 목표 도달 유도
             AddReward(-0.0002f);
 
-            // 목표 접근 보상
             if (goal != null)
             {
                 float dist = Vector3.Distance(transform.position, goal.position);
@@ -180,40 +204,66 @@ namespace HormuzAI.Agent
             ca[1] = Input.GetAxis("Horizontal");
         }
 
+        // ── 사망 처리 ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// 충돌·타임아웃·목표 도달 모두 이 메서드를 통해 처리한다.
+        /// 빨간색(실패) 또는 금색(성공)으로 변경 후 제자리 동결,
+        /// GenerationManager에 보고, 세대 리셋을 기다린다.
+        /// </summary>
+        void HandleDeath(bool reachedGoal, float reward)
+        {
+            if (_state != ShipState.Navigating) return;
+
+            _state = reachedGoal ? ShipState.Success : ShipState.Crashed;
+            SetReward(reward);
+
+            _waitingForGenReset = true;
+            SetMarkerColor(reachedGoal ? ColorSuccess : ColorDead);
+
+            _rb.linearVelocity  = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+
+            generationManager?.ReportEpisodeEnd(reachedGoal, reward);
+            EndEpisode();   // ML-Agents가 경험 데이터를 처리하도록 호출
+                            // → OnEpisodeBegin() 자동 호출되지만 _waitingForGenReset=true 이므로 동결
+        }
+
+        /// <summary>GenerationManager가 세대 종료 시 호출한다.</summary>
+        public void NotifyGenerationReset()
+        {
+            _waitingForGenReset = false;
+            SetMarkerColor(ColorAlive);
+            EndEpisode();   // → OnEpisodeBegin() 정상 실행 → 재스폰
+        }
+
         // ── Collision / Trigger ───────────────────────────────────────────
 
         void OnTriggerEnter(Collider other)
         {
-            if (_state != ShipState.Navigating) return;
-
             if (other.CompareTag("Goal"))
-            {
-                _state = ShipState.Success;
-                SetReward(1f);
-                generationManager?.ReportEpisodeEnd(true, 1f);
-                EndEpisode();
-            }
+                HandleDeath(true, 1f);
         }
 
         void OnCollisionEnter(Collision collision)
         {
-            if (_state != ShipState.Navigating) return;
-
             bool isBoundary = collision.gameObject.CompareTag("Boundary");
             bool isTerrain  = collision.gameObject.layer == LayerMask.NameToLayer("Terrain");
 
             if (isBoundary || isTerrain)
-            {
-                _state = ShipState.Crashed;
-                SetReward(-0.5f);
-                generationManager?.ReportEpisodeEnd(false, -0.5f);
-                EndEpisode();
-            }
+                HandleDeath(false, -0.5f);
+        }
+
+        // ── 시각 헬퍼 ─────────────────────────────────────────────────────
+
+        void SetMarkerColor(Color c)
+        {
+            if (_markerMat  != null) _markerMat.color  = c;
+            if (_trailMat   != null) _trailMat.color   = c;
         }
 
         // ── Sensing helpers ───────────────────────────────────────────────
 
-        /// <summary>0=장애물 없음(멀거나 미검출), 1=바로 앞. 관측값용.</summary>
         float ObstacleRay(Vector3 direction)
         {
             return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist, sensorLayerMask)
@@ -221,7 +271,6 @@ namespace HormuzAI.Agent
                 : 0f;
         }
 
-        /// <summary>실제 거리 반환. 미검출 시 raycastMaxDist. 수로폭 계산용.</summary>
         float RaycastDistance(Vector3 direction)
         {
             return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist, sensorLayerMask)
@@ -229,25 +278,21 @@ namespace HormuzAI.Agent
                 : raycastMaxDist;
         }
 
-        /// <summary>0=얕음, 1=깊음. shallowThreshold~deepThreshold 사이를 선형 정규화.</summary>
         float GetDepthRatio()
         {
             if (!Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, deepThreshold + 100f, sensorLayerMask))
                 return 1f;
-
             float depth = hit.distance;
             if (depth <= shallowThreshold) return 0f;
             if (depth >= deepThreshold)    return 1f;
             return (depth - shallowThreshold) / (deepThreshold - shallowThreshold);
         }
 
-        /// <summary>0=좁음(양쪽 평균 < narrowThreshold), 1=넓음.</summary>
         float GetWidthRatio()
         {
             float left  = RaycastDistance(-transform.right);
             float right = RaycastDistance( transform.right);
-            float avg   = (left + right) * 0.5f;
-            return Mathf.Clamp01(avg / narrowThreshold);
+            return Mathf.Clamp01((left + right) * 0.5f / narrowThreshold);
         }
     }
 }

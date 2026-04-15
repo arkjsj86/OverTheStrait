@@ -64,13 +64,14 @@ namespace HormuzAI.Environment
                 // SetRefs는 즉시 호출되므로 첫 에피소드 시작 전에 모든 레퍼런스 할당됨
                 var agent = go.AddComponent<ShipAgent>();
                 agent.SetRefs(spawnManager, goal, stats, generationManager);
+                generationManager?.RegisterAgent(agent);   // 세대 관리자에 등록
 
                 // BehaviorName을 YAML config와 일치시킨다 (기본값 "My Behavior" → "HormuzShip")
                 var bp = go.GetComponent<BehaviorParameters>();
                 if (bp != null) bp.BehaviorName = "HormuzShip";
 
-                // MaxStep: 멈춘 배가 영원히 대기하지 않도록 에피소드 최대 길이 설정
-                agent.MaxStep = 10000;
+                // 타임아웃은 ShipAgent 내부 타이머로 처리 → MaxStep 불필요
+                agent.MaxStep = 0;
 
                 // ── 시각 마커 (상공 카메라에서 배 위치 식별용) ──────────────
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);

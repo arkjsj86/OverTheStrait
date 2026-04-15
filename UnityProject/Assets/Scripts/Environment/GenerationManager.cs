@@ -1,23 +1,29 @@
 // UnityProject/Assets/Scripts/Environment/GenerationManager.cs
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using HormuzAI.Agent;
 
 namespace HormuzAI.Environment
 {
     /// <summary>
     /// 에이전트 에피소드 결과를 세대 단위로 집계하고 CSV로 기록한다.
     ///
-    /// 세대 정의: agentsPerGeneration 개의 에피소드가 완료된 시점.
-    /// CSV 위치: {ProjectRoot}/logs/training_history.csv
-    ///   (Application.dataPath 기준 ../../logs/)
+    /// 세대 정의: 등록된 모든 에이전트가 사망(충돌/타임아웃) 또는 목표 도달로 종료된 시점.
+    /// 모든 에이전트가 동시에 리셋되며, 각 에이전트는 사망 후 빨간색으로 대기한다.
     ///
-    /// 재실행 시 CSV 데이터 행 수를 읽어 세대 번호를 이어받는다.
+    /// CSV 위치: {ProjectRoot}/logs/training_history.csv
     /// </summary>
     public class GenerationManager : MonoBehaviour
     {
         [Header("Settings")]
-        [SerializeField] int agentsPerGeneration = 50;
+        [SerializeField] int   agentsPerGeneration = 50;
+        [SerializeField] float timeScale           = 20f;
+
+        // ── 에이전트 등록 ──────────────────────────────────────────────────
+        readonly List<ShipAgent> _registeredAgents = new List<ShipAgent>();
+        int _aliveThisGen;
 
         // ── 집계 상태 ─────────────────────────────────────────────────────
         int   _currentGeneration;
@@ -26,17 +32,16 @@ namespace HormuzAI.Environment
         float _totalReward;
         int   _goalReachedCount;
 
-        // ── CSV 경로 (테스트에서 reflection으로 주입 가능) ─────────────────
+        // ── CSV 경로 ──────────────────────────────────────────────────────
         string _csvPath;
 
         // ── Unity 생명주기 ─────────────────────────────────────────────────
 
         void Start()
         {
-            // 포커스를 잃어도 학습이 계속 진행되도록 설정
             Application.runInBackground = true;
+            Time.timeScale = timeScale;
 
-            // {UnityProject}/Assets/../../logs/ = {ProjectRoot}/logs/
             string logsDir = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "..", "..", "logs"));
             Directory.CreateDirectory(logsDir);
@@ -45,16 +50,19 @@ namespace HormuzAI.Environment
             _currentGeneration = LoadCurrentGeneration();
             InitGeneration();
 
-            Debug.Log($"[GenerationManager] 세대 {_currentGeneration}부터 시작. 기록: {_csvPath}");
+            Debug.Log($"[GenerationManager] 세대 {_currentGeneration}부터 시작. timeScale={timeScale}x");
         }
 
         // ── 외부 API ───────────────────────────────────────────────────────
 
-        /// <summary>
-        /// ShipAgent가 에피소드 종료 시 호출한다.
-        /// </summary>
-        /// <param name="reachedGoal">GoalTrigger 도달 여부</param>
-        /// <param name="reward">에피소드 결과 보상 (1f / -0.5f / -0.1f)</param>
+        /// <summary>AgentPopulator가 에이전트 생성 시 호출한다.</summary>
+        public void RegisterAgent(ShipAgent agent)
+        {
+            if (!_registeredAgents.Contains(agent))
+                _registeredAgents.Add(agent);
+        }
+
+        /// <summary>ShipAgent가 에피소드 종료 시 호출한다.</summary>
         public void ReportEpisodeEnd(bool reachedGoal, float reward)
         {
             _completedThisGen++;
@@ -62,7 +70,8 @@ namespace HormuzAI.Environment
             if (reachedGoal) _goalReachedCount++;
             if (reward > _bestReward) _bestReward = reward;
 
-            if (_completedThisGen >= agentsPerGeneration)
+            _aliveThisGen--;
+            if (_aliveThisGen <= 0)
                 EndGeneration();
         }
 
@@ -72,32 +81,37 @@ namespace HormuzAI.Environment
         {
             if (!File.Exists(_csvPath)) return 1;
             var lines = File.ReadAllLines(_csvPath);
-            // lines[0] = 헤더, lines[1..] = 데이터
             int dataLines = Mathf.Max(0, lines.Length - 1);
             return dataLines + 1;
         }
 
-        private void InitGeneration()
+        void InitGeneration()
         {
             _completedThisGen = 0;
             _bestReward       = float.MinValue;
             _totalReward      = 0f;
             _goalReachedCount = 0;
+            // 등록된 에이전트 수 우선, 없으면 Inspector 값 사용
+            _aliveThisGen = _registeredAgents.Count > 0
+                ? _registeredAgents.Count
+                : agentsPerGeneration;
         }
 
         void EndGeneration()
         {
-            float avg  = _totalReward / _completedThisGen;
-            int   goal = _goalReachedCount;
+            float avg  = _completedThisGen > 0 ? _totalReward / _completedThisGen : 0f;
             int   gen  = _currentGeneration;
-            int   tot  = agentsPerGeneration;
+            int   tot  = _completedThisGen;
 
-            Debug.Log($"[Gen {gen:D4}] Best: {_bestReward:F3} | Avg: {avg:F3} | Goal: {goal}/{tot}");
-
-            AppendCsv(gen, _bestReward, avg, goal, tot);
+            Debug.Log($"[Gen {gen:D4}] Best: {_bestReward:F3} | Avg: {avg:F3} | Goal: {_goalReachedCount}/{tot}");
+            AppendCsv(gen, _bestReward, avg, _goalReachedCount, tot);
 
             _currentGeneration++;
             InitGeneration();
+
+            // 모든 에이전트 동시 리셋
+            foreach (var agent in _registeredAgents)
+                agent.NotifyGenerationReset();
         }
 
         void AppendCsv(int gen, float best, float avg, int goal, int total)
