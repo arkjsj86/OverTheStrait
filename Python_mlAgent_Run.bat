@@ -14,11 +14,21 @@ echo.
 set LEARN=venv_mlagents\Scripts\mlagents-learn.exe
 set CONFIG=config/hormuz_stage1.yaml
 set RUN_ID=hormuz_run1
-set RESULTS=results\%RUN_ID%
+set CHECKPOINT=results\%RUN_ID%\HormuzShip\checkpoint.pt
 
-if not exist "%RESULTS%" goto :fresh
+if exist "%CHECKPOINT%" goto :has_checkpoint
 
-echo  Previous training data found: %RESULTS%
+if exist "results\%RUN_ID%" (
+    echo  Run folder found but no checkpoint saved yet.
+    echo  Starting fresh (previous incomplete data will be overwritten).
+    echo.
+    goto :force
+)
+
+goto :fresh
+
+:has_checkpoint
+echo  Checkpoint found: %CHECKPOINT%
 echo.
 echo  [R] Resume   - continue from last checkpoint
 echo  [N] New run  - delete previous data and restart
@@ -33,7 +43,18 @@ echo  Invalid input. Exiting.
 goto :quit
 
 :fresh
-echo  No previous data found. Starting new training...
+echo  Starting new training...
+goto :run_fresh
+
+:force
+echo  Overwriting previous data and starting new run...
+goto :run_force
+
+:resume
+echo  Resuming from last checkpoint...
+goto :run_resume
+
+:run_fresh
 echo  Press Play in Unity when you see:
 echo  "Start training by pressing the Play button"
 echo ----------------------------------------
@@ -41,22 +62,20 @@ echo.
 "%LEARN%" %CONFIG% --run-id=%RUN_ID%
 goto :done
 
-:resume
-echo  Resuming from last checkpoint...
-echo  Press Play in Unity when you see:
-echo  "Start training by pressing the Play button"
-echo ----------------------------------------
-echo.
-"%LEARN%" %CONFIG% --run-id=%RUN_ID% --resume
-goto :done
-
-:force
-echo  Starting new run (previous data will be overwritten)...
+:run_force
 echo  Press Play in Unity when you see:
 echo  "Start training by pressing the Play button"
 echo ----------------------------------------
 echo.
 "%LEARN%" %CONFIG% --run-id=%RUN_ID% --force
+goto :done
+
+:run_resume
+echo  Press Play in Unity when you see:
+echo  "Start training by pressing the Play button"
+echo ----------------------------------------
+echo.
+"%LEARN%" %CONFIG% --run-id=%RUN_ID% --resume
 goto :done
 
 :quit
