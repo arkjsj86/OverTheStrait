@@ -19,12 +19,14 @@ namespace HormuzAI.Agent
         [Header("Ship Identity")]
         [SerializeField] protected ShipStatsSO stats;
         [SerializeField] protected ShipType shipType;
+        [SerializeField] int spawnIndex = 0;
 
         [Header("Sensing Thresholds")]
         [SerializeField] float shallowThreshold = 500f;   // m
         [SerializeField] float deepThreshold    = 1500f;  // m
         [SerializeField] float narrowThreshold  = 3000f;  // m
         [SerializeField] float raycastMaxDist   = 5000f;  // m
+        [SerializeField] LayerMask sensorLayerMask = Physics.DefaultRaycastLayers;
 
         [Header("Scene References")]
         [SerializeField] SpawnManager spawnManager;
@@ -36,11 +38,18 @@ namespace HormuzAI.Agent
         float     _currentHealth;
         ShipState _state;
         float     _prevDistToGoal;
+        float     _depthRatio;
+        float     _widthRatio;
 
         // ── Unity / ML-Agents lifecycle ───────────────────────────────────
 
         public override void Initialize()
         {
+            if (stats == null)
+            {
+                Debug.LogError($"[ShipAgent] stats (ShipStatsSO) is not assigned on '{name}'. Agent will not function.", this);
+                return;
+            }
             _rb = GetComponent<Rigidbody>();
             _rb.constraints = RigidbodyConstraints.FreezePositionY
                             | RigidbodyConstraints.FreezeRotationX
@@ -58,12 +67,15 @@ namespace HormuzAI.Agent
             _state         = ShipState.Navigating;
 
             Transform spawn = spawnManager != null
-                ? spawnManager.GetSpawnPoint(0)
+                ? spawnManager.GetSpawnPoint(spawnIndex)
                 : transform;
 
             transform.SetPositionAndRotation(spawn.position, spawn.rotation);
             _rb.linearVelocity  = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
+
+            if (goal == null)
+                Debug.LogWarning($"[ShipAgent] goal is not assigned on '{name}'. Approach reward will not function.", this);
 
             _prevDistToGoal = goal != null
                 ? Vector3.Distance(transform.position, goal.position)
@@ -90,10 +102,12 @@ namespace HormuzAI.Agent
             sensor.AddObservation(Mathf.Clamp01(_rb.linearVelocity.magnitude / stats.maxSpeed));
 
             // 6: 수심 비율 (0=얕음, 1=깊음)
-            sensor.AddObservation(GetDepthRatio());
+            _depthRatio = GetDepthRatio();
+            _widthRatio = GetWidthRatio();
+            sensor.AddObservation(_depthRatio);
 
             // 7: 수로폭 비율 (0=좁음, 1=넓음)
-            sensor.AddObservation(GetWidthRatio());
+            sensor.AddObservation(_widthRatio);
 
             // 8: 체력 비율
             sensor.AddObservation(_currentHealth / stats.maxHealth);
@@ -111,14 +125,18 @@ namespace HormuzAI.Agent
             float throttle = actions.ContinuousActions[0]; // -1 ~ +1
             float steering = actions.ContinuousActions[1]; // -1 ~ +1
 
-            float depthRatio  = GetDepthRatio();
-            float widthRatio  = GetWidthRatio();
+            float depthRatio  = _depthRatio;
+            float widthRatio  = _widthRatio;
             float healthRatio = _currentHealth / stats.maxHealth;
 
             float speed    = stats.GetEffectiveSpeed(depthRatio, healthRatio);
             float turnRate = stats.GetEffectiveTurnRate(widthRatio);
 
-            _rb.linearVelocity = transform.forward * throttle * speed;
+            float clampedThrottle = Mathf.Clamp01(throttle);
+            _rb.linearVelocity = Vector3.Lerp(
+                _rb.linearVelocity,
+                transform.forward * clampedThrottle * speed,
+                Time.fixedDeltaTime * 5f);
             transform.Rotate(Vector3.up, steering * turnRate * 45f * Time.fixedDeltaTime);
 
             // 목표 접근 보상
@@ -171,7 +189,7 @@ namespace HormuzAI.Agent
         /// <summary>0=장애물 없음(멀거나 미검출), 1=바로 앞. 관측값용.</summary>
         float ObstacleRay(Vector3 direction)
         {
-            return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist)
+            return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist, sensorLayerMask)
                 ? 1f - (hit.distance / raycastMaxDist)
                 : 0f;
         }
@@ -179,7 +197,7 @@ namespace HormuzAI.Agent
         /// <summary>실제 거리 반환. 미검출 시 raycastMaxDist. 수로폭 계산용.</summary>
         float RaycastDistance(Vector3 direction)
         {
-            return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist)
+            return Physics.Raycast(transform.position, direction, out RaycastHit hit, raycastMaxDist, sensorLayerMask)
                 ? hit.distance
                 : raycastMaxDist;
         }
@@ -187,7 +205,7 @@ namespace HormuzAI.Agent
         /// <summary>0=얕음, 1=깊음. shallowThreshold~deepThreshold 사이를 선형 정규화.</summary>
         float GetDepthRatio()
         {
-            if (!Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, deepThreshold + 100f))
+            if (!Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, deepThreshold + 100f, sensorLayerMask))
                 return 1f;
 
             float depth = hit.distance;
