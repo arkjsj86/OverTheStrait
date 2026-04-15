@@ -17,6 +17,7 @@ namespace HormuzAI.Editor
         // ── 경로 상수 ──────────────────────────────────────
         private const string SCENE_PATH       = "Assets/Scenes/HormuzStage1.unity";
         private const string TERRAIN_ASSET    = "Assets/Terrain/HormuzTerrainData.asset";
+        private const string TERRAIN_MAT      = "Assets/Terrain/TerrainMaterial.asset";
         private const string WATER_MAT_ASSET  = "Assets/Materials/WaterMaterial.mat";
         private const string HEIGHTMAP_RAW    = "Terrain/heightmap_hormuz.raw";   // Assets/ 상대
         private const string HEIGHTMAP_META   = "Terrain/heightmap_meta.txt";
@@ -119,36 +120,24 @@ namespace HormuzAI.Editor
             terrainGO.layer = LayerMask.NameToLayer("Terrain");
 
             ImportHeightmap(td);
-            ApplyTerrainBaseColor(td);
+            ApplyTerrainMaterial(terrainGO);
         }
 
-        /// <summary>지형에 모래색 베이스 레이어를 적용해 상공에서 육지가 뚜렷이 보이게 한다.</summary>
-        private static void ApplyTerrainBaseColor(TerrainData td)
+        /// <summary>Terrain 컴포넌트에 모래색 material을 직접 지정한다.</summary>
+        private static void ApplyTerrainMaterial(GameObject terrainGO)
         {
-            const string TEX_ASSET   = "Assets/Terrain/SandTexture.asset";
-            const string LAYER_ASSET = "Assets/Terrain/SandLayer.asset";
+            if (AssetDatabase.LoadAssetAtPath<Material>(TERRAIN_MAT) != null)
+                AssetDatabase.DeleteAsset(TERRAIN_MAT);
 
-            // 1×1 모래색 텍스처
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            tex.SetPixel(0, 0, new Color(0.80f, 0.68f, 0.42f)); // 모래색
-            tex.Apply();
-            if (AssetDatabase.LoadAssetAtPath<Texture2D>(TEX_ASSET) != null)
-                AssetDatabase.DeleteAsset(TEX_ASSET);
-            AssetDatabase.CreateAsset(tex, TEX_ASSET);
-
-            // TerrainLayer
-            var layer = new TerrainLayer
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"))
             {
-                diffuseTexture = tex,
-                tileSize       = new Vector2(2000f, 2000f)  // 2km 타일
+                color = new Color(0.80f, 0.68f, 0.42f)   // 모래색
             };
-            if (AssetDatabase.LoadAssetAtPath<TerrainLayer>(LAYER_ASSET) != null)
-                AssetDatabase.DeleteAsset(LAYER_ASSET);
-            AssetDatabase.CreateAsset(layer, LAYER_ASSET);
+            AssetDatabase.CreateAsset(mat, TERRAIN_MAT);
             AssetDatabase.SaveAssets();
 
-            td.terrainLayers = new TerrainLayer[] { layer };
-            Debug.Log("[HormuzSceneBuilder] 지형 모래색 레이어 적용 완료.");
+            terrainGO.GetComponent<Terrain>().materialTemplate = mat;
+            Debug.Log("[HormuzSceneBuilder] 지형 모래색 material 적용 완료.");
         }
 
         private static void ImportHeightmap(TerrainData td)
