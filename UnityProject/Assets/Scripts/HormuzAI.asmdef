@@ -1,6 +1,8 @@
 {
     "name": "HormuzAI",
-    "references": [],
+    "references": [
+        "Unity.ML-Agents"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
