@@ -37,7 +37,9 @@ namespace HormuzAI.Environment
 
         // ── Unity 생명주기 ─────────────────────────────────────────────────
 
-        void Start()
+        // Awake() 사용: AgentPopulator.Start()보다 먼저 실행되어
+        // _aliveThisGen 초기화를 보장한다 (Start() 실행 순서 의존성 제거).
+        void Awake()
         {
             Application.runInBackground = true;
             Time.timeScale = timeScale;
@@ -48,9 +50,15 @@ namespace HormuzAI.Environment
             _csvPath = Path.Combine(logsDir, "training_history.csv");
 
             _currentGeneration = LoadCurrentGeneration();
-            InitGeneration();
+            _aliveThisGen = agentsPerGeneration;   // RegisterAgent 전 안전 초기값
 
             Debug.Log($"[GenerationManager] 세대 {_currentGeneration}부터 시작. timeScale={timeScale}x");
+        }
+
+        void Start()
+        {
+            // Awake()에서 등록된 에이전트 수로 재설정 (RegisterAgent가 Awake 이후 호출된 경우)
+            InitGeneration();
         }
 
         // ── 외부 API ───────────────────────────────────────────────────────
