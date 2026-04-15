@@ -43,6 +43,7 @@ namespace HormuzAI.Editor
             CreateSpawnPoints(root, seaY);
             CreateGoalTrigger(root, seaY);
             CreateBoundaryWalls(root);
+            CreateOverviewCamera(root);
 
             EditorSceneManager.SaveScene(scene, SCENE_PATH);
             AssetDatabase.Refresh();
@@ -243,6 +244,30 @@ namespace HormuzAI.Editor
             wall.transform.SetParent(parent.transform);
             wall.transform.position = pos;
             wall.AddComponent<BoxCollider>().size = size;
+        }
+
+        // ── OverviewCamera ─────────────────────────────────────────────────
+
+        private static void CreateOverviewCamera(GameObject parent)
+        {
+            var camGO = new GameObject("OverviewCamera");
+            camGO.transform.SetParent(parent.transform);
+
+            var cam = camGO.AddComponent<Camera>();
+            cam.orthographic     = true;
+            cam.orthographicSize = 22000f;   // 세로 44km — 지형 40km 커버
+            cam.farClipPlane     = 15000f;
+            cam.backgroundColor  = new Color(0.05f, 0.1f, 0.2f);
+            cam.clearFlags       = CameraClearFlags.SolidColor;
+            camGO.tag = "MainCamera";
+
+            // 지형 정중앙 상공, 수직 하향
+            // X: 56000/2=28000  Y: 12000  Z: 40000/2=20000
+            camGO.transform.SetPositionAndRotation(
+                new Vector3(TERRAIN_W / 2f, 12000f, TERRAIN_D / 2f),
+                Quaternion.Euler(90f, 0f, 0f));
+
+            Debug.Log("[HormuzSceneBuilder] OverviewCamera 생성 완료.");
         }
     }
 }

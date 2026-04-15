@@ -89,27 +89,7 @@ namespace HormuzAI.Editor
             popSO.FindProperty("generationManager").objectReferenceValue = genMgr;
             popSO.ApplyModifiedProperties();
 
-            // ── 5. 개요 카메라 설정 (2560×1440 전체 씬 조망) ──────────────
-            // 지형: X=0~56000, Z=0~40000 / 직교 카메라 정중앙 하향
-            var cam = Camera.main;
-            if (cam != null)
-            {
-                Undo.RecordObject(cam,               "Setup Overview Camera");
-                Undo.RecordObject(cam.transform,     "Setup Overview Camera Transform");
-                cam.orthographic     = true;
-                cam.orthographicSize = 22000f;   // 세로 44km — 지형 40km 커버
-                cam.farClipPlane     = 15000f;
-                cam.transform.SetPositionAndRotation(
-                    new Vector3(28000f, 12000f, 20000f),
-                    Quaternion.Euler(90f, 0f, 0f));  // 정수직 하향
-                Debug.Log("[HormuzTrainingSetup] 카메라: 직교 22000, 정수직 하향 설정 완료.");
-            }
-            else
-            {
-                Debug.LogWarning("[HormuzTrainingSetup] Main Camera를 찾지 못했습니다. 카메라를 수동으로 설정하세요.");
-            }
-
-            // ── 6. 씬 저장 ─────────────────────────────────────────────────
+            // ── 5. 씬 저장 ─────────────────────────────────────────────────
             EditorSceneManager.MarkSceneDirty(
                 UnityEngine.SceneManagement.SceneManager.GetActiveScene());
             EditorSceneManager.SaveOpenScenes();
