@@ -1,5 +1,6 @@
 // UnityProject/Assets/Scripts/Environment/AgentPopulator.cs
 using UnityEngine;
+using Unity.MLAgents.Policies;
 using HormuzAI.Agent;
 using HormuzAI.Data;
 
@@ -63,6 +64,10 @@ namespace HormuzAI.Environment
                 // SetRefs는 즉시 호출되므로 첫 에피소드 시작 전에 모든 레퍼런스 할당됨
                 var agent = go.AddComponent<ShipAgent>();
                 agent.SetRefs(spawnManager, goal, stats, generationManager);
+
+                // BehaviorName을 YAML config와 일치시킨다 (기본값 "My Behavior" → "HormuzShip")
+                var bp = go.GetComponent<BehaviorParameters>();
+                if (bp != null) bp.BehaviorName = "HormuzShip";
 
                 // ── 시각 마커 (상공 카메라에서 배 위치 식별용) ──────────────
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
