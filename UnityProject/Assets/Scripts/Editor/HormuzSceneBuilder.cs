@@ -64,9 +64,20 @@ namespace HormuzAI.Editor
 
         private static void EnsureDirectories()
         {
-            string dataPath = Application.dataPath;
+            // AssetDatabase.CreateFolder 사용: 즉시 DB에 등록되므로
+            // 동일 호출 내에서 바로 AssetDatabase.CreateAsset 가능
             foreach (var rel in new[] { "Scenes", "Terrain", "Materials", "Scripts/Environment", "Scripts/Editor" })
-                Directory.CreateDirectory(Path.Combine(dataPath, rel));
+            {
+                string[] parts    = rel.Split('/');
+                string   current  = "Assets";
+                foreach (var part in parts)
+                {
+                    string next = current + "/" + part;
+                    if (!AssetDatabase.IsValidFolder(next))
+                        AssetDatabase.CreateFolder(current, part);
+                    current = next;
+                }
+            }
         }
 
         private static void SetupTagsAndLayers()
@@ -118,7 +129,8 @@ namespace HormuzAI.Editor
             };
             td.SetDetailResolution(512, 16);
 
-            if (File.Exists(Path.Combine(Application.dataPath, "..", TERRAIN_ASSET)))
+            // File.Exists 대신 AssetDatabase API 사용 (경로 정규화 문제 방지)
+            if (AssetDatabase.LoadAssetAtPath<TerrainData>(TERRAIN_ASSET) != null)
                 AssetDatabase.DeleteAsset(TERRAIN_ASSET);
             AssetDatabase.CreateAsset(td, TERRAIN_ASSET);
 
@@ -172,6 +184,8 @@ namespace HormuzAI.Editor
                 }
 
             td.SetHeights(0, 0, heights);
+            EditorUtility.SetDirty(td);
+            AssetDatabase.SaveAssets();
             Debug.Log("[HormuzSceneBuilder] 하이트맵 임포트 완료.");
         }
 
@@ -191,7 +205,7 @@ namespace HormuzAI.Editor
             {
                 color = new Color(0.0f, 0.55f, 0.85f, 1f)  // 밝은 청록색
             };
-            if (File.Exists(Path.Combine(Application.dataPath, "..", WATER_MAT_ASSET)))
+            if (AssetDatabase.LoadAssetAtPath<Material>(WATER_MAT_ASSET) != null)
                 AssetDatabase.DeleteAsset(WATER_MAT_ASSET);
             AssetDatabase.CreateAsset(mat, WATER_MAT_ASSET);
             water.GetComponent<Renderer>().sharedMaterial = mat;
