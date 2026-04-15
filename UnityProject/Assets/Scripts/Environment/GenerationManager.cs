@@ -19,7 +19,7 @@ namespace HormuzAI.Environment
     {
         [Header("Settings")]
         [SerializeField] int   agentsPerGeneration = 50;
-        [SerializeField] float timeScale           = 20f;
+        [SerializeField] float timeScale           = 5f;
 
         // ── 에이전트 등록 ──────────────────────────────────────────────────
         readonly List<ShipAgent> _registeredAgents = new List<ShipAgent>();
