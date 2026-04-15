@@ -166,7 +166,7 @@ namespace HormuzAI.Agent
             _episodeTimer += Time.fixedDeltaTime;
             if (_episodeTimer >= maxEpisodeTime)
             {
-                HandleDeath(false, -0.1f);
+                HandleDeath(false, -0.3f);
                 return;
             }
 
@@ -187,14 +187,31 @@ namespace HormuzAI.Agent
                 Time.fixedDeltaTime * 5f);
             transform.Rotate(Vector3.up, steering * turnRate * 45f * Time.fixedDeltaTime);
 
+            // ── 매 스텝 보상 ──────────────────────────────────────────────
+            // 1. 생존 패널티 — 빠른 목표 도달 유도
             AddReward(-0.0002f);
 
+            // 2. 목표 접근 보상 — 거리 차분
             if (goal != null)
             {
                 float dist = Vector3.Distance(transform.position, goal.position);
                 AddReward((_prevDistToGoal - dist) * 0.001f);
                 _prevDistToGoal = dist;
             }
+
+            // 3. 목표 방향 정렬 보상 — 목표를 정면으로 향할수록 최대
+            if (goal != null)
+            {
+                Vector3 toGoal = (goal.position - transform.position).normalized;
+                float   angle  = Vector3.SignedAngle(transform.forward, toGoal, Vector3.up);
+                AddReward(0.0001f * (1f - Mathf.Abs(angle) / 180f));
+            }
+
+            // 4. 수심 품질 보상 — 깊은 수로 선호 유도 (Stage 2 암초 회피 기반 학습)
+            AddReward(0.0001f * _depthRatio);
+
+            // 5. 수로폭 품질 보상 — 넓은 곳 선호 유도
+            AddReward(0.00005f * _widthRatio);
         }
 
         public override void Heuristic(in ActionBuffers actionsOut)
@@ -251,7 +268,7 @@ namespace HormuzAI.Agent
             bool isTerrain  = collision.gameObject.layer == LayerMask.NameToLayer("Terrain");
 
             if (isBoundary || isTerrain)
-                HandleDeath(false, -0.5f);
+                HandleDeath(false, -1.0f);
         }
 
         // ── 시각 헬퍼 ─────────────────────────────────────────────────────
