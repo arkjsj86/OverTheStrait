@@ -41,7 +41,7 @@ namespace HormuzAI.Tests
         [Test]
         public void ReportEpisodeEnd_CountsGoalReached()
         {
-            var gm = CreateGM(3);
+            var gm = CreateGM(4);
             gm.ReportEpisodeEnd(true,  1f);
             gm.ReportEpisodeEnd(false, -0.5f);
             gm.ReportEpisodeEnd(false, -0.1f);
@@ -55,7 +55,7 @@ namespace HormuzAI.Tests
         [Test]
         public void ReportEpisodeEnd_TracksBestReward()
         {
-            var gm = CreateGM(3);
+            var gm = CreateGM(4);
             gm.ReportEpisodeEnd(false, -0.5f);
             gm.ReportEpisodeEnd(true,   1f);
             gm.ReportEpisodeEnd(false, -0.1f);
