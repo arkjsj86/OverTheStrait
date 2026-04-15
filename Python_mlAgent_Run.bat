@@ -15,7 +15,7 @@ echo  "Start training by pressing the Play button"
 echo.
 echo ----------------------------------------
 
-venv_mlagents\Scripts\mlagents-learn.exe config/hormuz_stage1.yaml --run-id=hormuz_run1
+venv_mlagents\Scripts\mlagents-learn.exe config/hormuz_stage1.yaml --run-id=hormuz_run1 --force
 
 REM To resume a previous run, replace the line above with:
 REM venv_mlagents\Scripts\mlagents-learn.exe config/hormuz_stage1.yaml --run-id=hormuz_run1 --resume
