@@ -2,7 +2,8 @@
     "name": "HormuzAI.Tests.EditMode",
     "references": [
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "HormuzAI"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],
