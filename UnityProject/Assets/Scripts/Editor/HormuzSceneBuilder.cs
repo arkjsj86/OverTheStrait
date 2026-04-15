@@ -193,11 +193,9 @@ namespace HormuzAI.Editor
             spawnRoot.transform.SetParent(parent.transform);
             spawnRoot.AddComponent<SpawnManager>();
 
-            // SpawnPoint_0: 페르시아만 입구 (56°E, 26.5°N → Unity XZ 기준)
-            // 하이트맵 범위 50~58.5°E / 22~27.5°N을 56000×40000으로 매핑
             var sp0 = new GameObject("SpawnPoint_0");
             sp0.transform.SetParent(spawnRoot.transform);
-            sp0.transform.position = new Vector3(39500f, seaY + 1f, 32700f);
+            sp0.transform.position = new Vector3(1000f, seaY, 39000f);
         }
 
         // ── GoalTrigger ────────────────────────────────────
@@ -207,12 +205,11 @@ namespace HormuzAI.Editor
             var goal = new GameObject("GoalTrigger");
             goal.tag = "Goal";
             goal.transform.SetParent(parent.transform);
-            // 오만만 출구 (57.5°E, 24°N → Unity XZ 기준)
-            goal.transform.position = new Vector3(49400f, seaY + 10f, 14500f);
+            goal.transform.position = new Vector3(55025f, seaY, 19025f);
 
             var col = goal.AddComponent<BoxCollider>();
             col.isTrigger = true;
-            col.size = new Vector3(200f, 100f, 8000f);
+            col.size = new Vector3(200f, 100f, 15000f);
         }
 
         // ── BoundaryWalls ──────────────────────────────────
