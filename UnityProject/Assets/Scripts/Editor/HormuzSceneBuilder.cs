@@ -119,6 +119,36 @@ namespace HormuzAI.Editor
             terrainGO.layer = LayerMask.NameToLayer("Terrain");
 
             ImportHeightmap(td);
+            ApplyTerrainBaseColor(td);
+        }
+
+        /// <summary>지형에 모래색 베이스 레이어를 적용해 상공에서 육지가 뚜렷이 보이게 한다.</summary>
+        private static void ApplyTerrainBaseColor(TerrainData td)
+        {
+            const string TEX_ASSET   = "Assets/Terrain/SandTexture.asset";
+            const string LAYER_ASSET = "Assets/Terrain/SandLayer.asset";
+
+            // 1×1 모래색 텍스처
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            tex.SetPixel(0, 0, new Color(0.80f, 0.68f, 0.42f)); // 모래색
+            tex.Apply();
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(TEX_ASSET) != null)
+                AssetDatabase.DeleteAsset(TEX_ASSET);
+            AssetDatabase.CreateAsset(tex, TEX_ASSET);
+
+            // TerrainLayer
+            var layer = new TerrainLayer
+            {
+                diffuseTexture = tex,
+                tileSize       = new Vector2(2000f, 2000f)  // 2km 타일
+            };
+            if (AssetDatabase.LoadAssetAtPath<TerrainLayer>(LAYER_ASSET) != null)
+                AssetDatabase.DeleteAsset(LAYER_ASSET);
+            AssetDatabase.CreateAsset(layer, LAYER_ASSET);
+            AssetDatabase.SaveAssets();
+
+            td.terrainLayers = new TerrainLayer[] { layer };
+            Debug.Log("[HormuzSceneBuilder] 지형 모래색 레이어 적용 완료.");
         }
 
         private static void ImportHeightmap(TerrainData td)
@@ -161,7 +191,7 @@ namespace HormuzAI.Editor
 
             var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"))
             {
-                color = new Color(0.08f, 0.37f, 0.68f, 1f)
+                color = new Color(0.0f, 0.55f, 0.85f, 1f)  // 밝은 청록색
             };
             if (File.Exists(Path.Combine(Application.dataPath, "..", WATER_MAT_ASSET)))
                 AssetDatabase.DeleteAsset(WATER_MAT_ASSET);
@@ -257,7 +287,7 @@ namespace HormuzAI.Editor
             cam.orthographic     = true;
             cam.orthographicSize = 22000f;   // 세로 44km — 지형 40km 커버
             cam.farClipPlane     = 15000f;
-            cam.backgroundColor  = new Color(0.05f, 0.1f, 0.2f);
+            cam.backgroundColor  = new Color(0.02f, 0.05f, 0.10f);  // 거의 검정 — 씬 경계 밖
             cam.clearFlags       = CameraClearFlags.SolidColor;
             camGO.tag = "MainCamera";
 
