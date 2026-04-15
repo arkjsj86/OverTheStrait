@@ -193,10 +193,9 @@ namespace HormuzAI.Editor
             spawnRoot.transform.SetParent(parent.transform);
             spawnRoot.AddComponent<SpawnManager>();
 
-            // SpawnPoint_0: 북서쪽 (페르시아만 입구, 지도 좌상단)
             var sp0 = new GameObject("SpawnPoint_0");
             sp0.transform.SetParent(spawnRoot.transform);
-            sp0.transform.position = new Vector3(1000f, seaY + 1f, TERRAIN_D - 1000f);
+            sp0.transform.position = new Vector3(1000f, seaY, 39000f);
         }
 
         // ── GoalTrigger ────────────────────────────────────
@@ -206,11 +205,11 @@ namespace HormuzAI.Editor
             var goal = new GameObject("GoalTrigger");
             goal.tag = "Goal";
             goal.transform.SetParent(parent.transform);
-            goal.transform.position = new Vector3(TERRAIN_W - 1000f, seaY + 10f, 1000f);
+            goal.transform.position = new Vector3(55025f, seaY, 19025f);
 
             var col = goal.AddComponent<BoxCollider>();
             col.isTrigger = true;
-            col.size = new Vector3(200f, 100f, TERRAIN_D * 0.6f);
+            col.size = new Vector3(200f, 100f, 15000f);
         }
 
         // ── BoundaryWalls ──────────────────────────────────
