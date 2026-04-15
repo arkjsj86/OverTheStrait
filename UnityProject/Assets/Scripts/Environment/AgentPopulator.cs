@@ -69,6 +69,9 @@ namespace HormuzAI.Environment
                 var bp = go.GetComponent<BehaviorParameters>();
                 if (bp != null) bp.BehaviorName = "HormuzShip";
 
+                // MaxStep: 멈춘 배가 영원히 대기하지 않도록 에피소드 최대 길이 설정
+                agent.MaxStep = 10000;
+
                 // ── 시각 마커 (상공 카메라에서 배 위치 식별용) ──────────────
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 marker.name = "Marker";

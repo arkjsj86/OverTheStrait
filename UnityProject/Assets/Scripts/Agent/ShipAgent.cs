@@ -153,12 +153,16 @@ namespace HormuzAI.Agent
             float speed    = stats.GetEffectiveSpeed(depthRatio, healthRatio);
             float turnRate = stats.GetEffectiveTurnRate(widthRatio);
 
-            float clampedThrottle = Mathf.Clamp01(throttle);
+            // [-1,+1] → [0,1] 재매핑: 어떤 출력값이든 항상 전진
+            float clampedThrottle = (throttle + 1f) * 0.5f;
             _rb.linearVelocity = Vector3.Lerp(
                 _rb.linearVelocity,
                 transform.forward * clampedThrottle * speed,
                 Time.fixedDeltaTime * 5f);
             transform.Rotate(Vector3.up, steering * turnRate * 45f * Time.fixedDeltaTime);
+
+            // 매 스텝 소량 감점 — 정지 패널티 + 빠른 목표 도달 유도
+            AddReward(-0.0002f);
 
             // 목표 접근 보상
             if (goal != null)
