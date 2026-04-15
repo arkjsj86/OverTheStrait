@@ -33,6 +33,9 @@ namespace HormuzAI.Environment
 
         void Start()
         {
+            // 포커스를 잃어도 학습이 계속 진행되도록 설정
+            Application.runInBackground = true;
+
             // {UnityProject}/Assets/../../logs/ = {ProjectRoot}/logs/
             string logsDir = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "..", "..", "logs"));
