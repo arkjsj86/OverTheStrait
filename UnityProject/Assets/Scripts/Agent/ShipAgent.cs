@@ -38,6 +38,7 @@ namespace HormuzAI.Agent
         float     _currentHealth;
         ShipState _state;
         float     _prevDistToGoal;
+        bool      _initialized;
         float     _depthRatio;
         float     _widthRatio;
 
@@ -55,10 +56,13 @@ namespace HormuzAI.Agent
                             | RigidbodyConstraints.FreezeRotationX
                             | RigidbodyConstraints.FreezeRotationZ;
             _state = ShipState.Idle;
+            _initialized = true;
         }
 
         public override void OnEpisodeBegin()
         {
+            if (!_initialized) return;
+
             // 이전 에피소드가 타임아웃으로 끝났으면 소폭 패널티
             if (_state == ShipState.Navigating)
                 AddReward(-0.1f);
@@ -86,6 +90,8 @@ namespace HormuzAI.Agent
 
         public override void CollectObservations(VectorSensor sensor)
         {
+            if (!_initialized) return;
+
             // 1~3: 전방 레이캐스트 (좌 30°, 정면, 우 30°) — 0=장애물 없음, 1=바로 앞
             sensor.AddObservation(ObstacleRay(Quaternion.Euler(0, -30, 0) * transform.forward));
             sensor.AddObservation(ObstacleRay(transform.forward));
@@ -120,6 +126,7 @@ namespace HormuzAI.Agent
 
         public override void OnActionReceived(ActionBuffers actions)
         {
+            if (!_initialized) return;
             if (_state != ShipState.Navigating) return;
 
             float throttle = actions.ContinuousActions[0]; // -1 ~ +1
