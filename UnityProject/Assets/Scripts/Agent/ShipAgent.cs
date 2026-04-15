@@ -19,7 +19,6 @@ namespace HormuzAI.Agent
         [Header("Ship Identity")]
         [SerializeField] protected ShipStatsSO stats;
         [SerializeField] protected ShipType shipType;
-        [SerializeField] int spawnIndex = 0;
 
         [Header("Sensing Thresholds")]
         [SerializeField] float shallowThreshold = 500f;   // m
@@ -29,8 +28,9 @@ namespace HormuzAI.Agent
         [SerializeField] LayerMask sensorLayerMask = Physics.DefaultRaycastLayers;
 
         [Header("Scene References")]
-        [SerializeField] SpawnManager spawnManager;
-        [SerializeField] Transform    goal;
+        [SerializeField] SpawnManager     spawnManager;
+        [SerializeField] Transform        goal;
+        [SerializeField] GenerationManager generationManager;
 
         // ── Private state ─────────────────────────────────────────────────
 
@@ -44,13 +44,17 @@ namespace HormuzAI.Agent
 
         // ── Unity / ML-Agents lifecycle ───────────────────────────────────
 
+        /// <summary>AgentPopulator 등 런타임 생성기가 레퍼런스를 주입할 때 사용한다.</summary>
+        public void SetRefs(SpawnManager sm, Transform g, ShipStatsSO s, GenerationManager gm)
+        {
+            spawnManager      = sm;
+            goal              = g;
+            stats             = s;
+            generationManager = gm;
+        }
+
         public override void Initialize()
         {
-            if (stats == null)
-            {
-                Debug.LogError($"[ShipAgent] stats (ShipStatsSO) is not assigned on '{name}'. Agent will not function.", this);
-                return;
-            }
             _rb = GetComponent<Rigidbody>();
             _rb.constraints = RigidbodyConstraints.FreezePositionY
                             | RigidbodyConstraints.FreezeRotationX
@@ -62,24 +66,33 @@ namespace HormuzAI.Agent
         public override void OnEpisodeBegin()
         {
             if (!_initialized) return;
+            if (stats == null)
+            {
+                Debug.LogError($"[ShipAgent] stats not assigned on '{name}'.", this);
+                return;
+            }
 
-            // 이전 에피소드가 타임아웃으로 끝났으면 소폭 패널티
+            // 이전 에피소드가 타임아웃(MaxStep)으로 종료된 경우
             if (_state == ShipState.Navigating)
+            {
                 AddReward(-0.1f);
+                generationManager?.ReportEpisodeEnd(false, -0.1f);
+            }
 
             _currentHealth = stats.maxHealth;
             _state         = ShipState.Navigating;
 
-            Transform spawn = spawnManager != null
-                ? spawnManager.GetSpawnPoint(spawnIndex)
-                : transform;
+            Vector3    spawnPos = spawnManager != null
+                ? spawnManager.GetRandomSpawnPosition()
+                : transform.position;
+            Quaternion spawnRot = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            transform.SetPositionAndRotation(spawnPos, spawnRot);
 
-            transform.SetPositionAndRotation(spawn.position, spawn.rotation);
             _rb.linearVelocity  = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
 
             if (goal == null)
-                Debug.LogWarning($"[ShipAgent] goal is not assigned on '{name}'. Approach reward will not function.", this);
+                Debug.LogWarning($"[ShipAgent] goal is not assigned on '{name}'.", this);
 
             _prevDistToGoal = goal != null
                 ? Vector3.Distance(transform.position, goal.position)
@@ -172,6 +185,7 @@ namespace HormuzAI.Agent
             {
                 _state = ShipState.Success;
                 SetReward(1f);
+                generationManager?.ReportEpisodeEnd(true, 1f);
                 EndEpisode();
             }
         }
@@ -187,6 +201,7 @@ namespace HormuzAI.Agent
             {
                 _state = ShipState.Crashed;
                 SetReward(-0.5f);
+                generationManager?.ReportEpisodeEnd(false, -0.5f);
                 EndEpisode();
             }
         }
