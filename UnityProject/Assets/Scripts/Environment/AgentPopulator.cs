@@ -63,6 +63,26 @@ namespace HormuzAI.Environment
                 // SetRefs는 즉시 호출되므로 첫 에피소드 시작 전에 모든 레퍼런스 할당됨
                 var agent = go.AddComponent<ShipAgent>();
                 agent.SetRefs(spawnManager, goal, stats, generationManager);
+
+                // ── 시각 마커 (상공 카메라에서 배 위치 식별용) ──────────────
+                var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                marker.name = "Marker";
+                marker.transform.SetParent(go.transform);
+                marker.transform.localPosition = Vector3.zero;
+                marker.transform.localScale    = Vector3.one * 120f; // 120m 구체
+                Object.Destroy(marker.GetComponent<SphereCollider>());
+                var mr  = marker.GetComponent<MeshRenderer>();
+                var mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                mat.color = new Color(0.1f, 1f, 0.35f); // 밝은 녹색
+                mr.sharedMaterial = mat;
+
+                // ── Trail — 이동 궤적 (3초 잔상) ────────────────────────────
+                var trail         = go.AddComponent<TrailRenderer>();
+                trail.time        = 3f;
+                trail.startWidth  = 60f;
+                trail.endWidth    = 0f;
+                trail.material    = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                trail.material.color = new Color(0.1f, 0.8f, 0.3f);
             }
         }
     }
