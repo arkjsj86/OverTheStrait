@@ -31,6 +31,18 @@ namespace HormuzAI.Environment
         /// </summary>
         public void SpawnAgents()
         {
+            if (stats == null || spawnManager == null || goal == null || generationManager == null)
+            {
+                Debug.LogError("[AgentPopulator] Inspector references not fully assigned. Aborting spawn.", this);
+                return;
+            }
+
+            if (transform.childCount > 0)
+            {
+                Debug.LogWarning("[AgentPopulator] SpawnAgents() called but children already exist. Skipping.", this);
+                return;
+            }
+
             for (int i = 0; i < agentCount; i++)
             {
                 var go = new GameObject($"ShipAgent_{i:D3}");
