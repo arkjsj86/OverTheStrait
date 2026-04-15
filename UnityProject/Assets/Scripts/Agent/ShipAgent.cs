@@ -69,6 +69,7 @@ namespace HormuzAI.Agent
             if (stats == null)
             {
                 Debug.LogError($"[ShipAgent] stats not assigned on '{name}'.", this);
+                _state = ShipState.Idle;
                 return;
             }
 
