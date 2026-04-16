@@ -160,7 +160,7 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     # 관통 문제를 해소한다. Stage 2 수심 gradient는 상수 offset으로 보존.
     # spec: docs/superpowers/specs/2026-04-16-heightmap-coast-binarization-design.md
     COAST_THRESHOLD = 5.0   # 이하 = 바다로 취급 (DEM 수직 오차 + 리샘플링 여유)
-    LAND_LIFT       = 25.0  # 육지 +25m lift (배 콜라이더 15m + 안전 마진 10m)
+    LAND_LIFT       = 45.0  # 육지 +45m lift → Unity y≈30m (2000/3006 스케일, 콜라이더 15m + 마진 15m)
     before_below = int(np.sum(data < COAST_THRESHOLD))
     before_above = int(np.sum(data >= COAST_THRESHOLD))
     data = np.where(data < COAST_THRESHOLD, 0.0, data + LAND_LIFT)
@@ -171,6 +171,17 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
 
     heightmap = normalize_and_resize(data, HEIGHTMAP_SIZE)
+
+    # ── 리사이즈 후 재이진화 ────────────────────────────────────────────────
+    # LANCZOS 리샘플링이 해안선을 번지게 해 0 < h < LAND_LIFT 구간에 애매 픽셀이
+    # 생기는 것을 방지한다. 정규화된 uint16 공간에서 임계값을 환산해 재스냅한다.
+    # LAND_LIFT / max_val 비율을 기준으로: LAND_LIFT 미만 → 0 으로 클리핑
+    span = (max_val - min_val) or 1.0  # min_val=0 이므로 span=max_val
+    lift_threshold_u16 = int((LAND_LIFT / span) * 65535)
+    sea_mask_resized = heightmap < lift_threshold_u16
+    heightmap[sea_mask_resized] = 0
+    print(f"리사이즈 후 재이진화: threshold={lift_threshold_u16} (≈{LAND_LIFT:.0f}m / {span:.0f}m)")
+    # ──────────────────────────────────────────────────────────────────
 
     os.makedirs(os.path.dirname(output_raw), exist_ok=True)
 
