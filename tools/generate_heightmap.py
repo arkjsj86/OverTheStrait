@@ -155,6 +155,18 @@ def from_geotiff(input_tif: str) -> np.ndarray:
 
 def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     """2D float32 고도 배열을 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
+    # ── 해안선 이진화 전처리 ────────────────────────────────────────────────
+    # 해수면 ±5m 애매 영역을 제거해 배 콜라이더(반경 15m)와 터레인의 간헐적
+    # 관통 문제를 해소한다. Stage 2 수심 gradient는 상수 offset으로 보존.
+    # spec: docs/superpowers/specs/2026-04-16-heightmap-coast-binarization-design.md
+    COAST_THRESHOLD = 5.0   # 이하 = 바다로 취급 (DEM 수직 오차 + 리샘플링 여유)
+    LAND_LIFT       = 25.0  # 육지 +25m lift (배 콜라이더 15m + 안전 마진 10m)
+    before_below = int(np.sum(data < COAST_THRESHOLD))
+    before_above = int(np.sum(data >= COAST_THRESHOLD))
+    data = np.where(data < COAST_THRESHOLD, 0.0, data + LAND_LIFT)
+    print(f"해안선 이진화: 바다 {before_below}px / 육지 {before_above}px (+{LAND_LIFT:.0f}m lift)")
+    # ──────────────────────────────────────────────────────────────────
+
     min_val, max_val = float(data.min()), float(data.max())
     print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
 
