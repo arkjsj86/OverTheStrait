@@ -189,9 +189,12 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     heightmap.byteswap().tofile(output_raw)
     print(f"RAW 저장: {output_raw}")
 
-    UNITY_TERRAIN_H = 2000.0  # 시각적 과장 ×4 (실제 최대 ~2981m → Unity 2000m)
+    UNITY_TERRAIN_H = 2000.0  # Unity Terrain height 캡 (실제 최대 ~3006m → 2000/3006≈0.665× 압축)
     span = (max_val - min_val) or 1.0
-    sea_level_y = (-min_val / span) * UNITY_TERRAIN_H
+    # 터레인 해저 바닥(Unity y=0)과 WaterPlane의 z-fighting 방지용 시각 offset.
+    # Spawn/Goal/WaterPlane 모두 meta 기준으로 배치되므로 일관되게 +1m 이동.
+    WATER_VISUAL_OFFSET = 1.0
+    sea_level_y = (-min_val / span) * UNITY_TERRAIN_H + WATER_VISUAL_OFFSET
 
     meta = (
         f"Width: {HEIGHTMAP_SIZE[1]}\n"
