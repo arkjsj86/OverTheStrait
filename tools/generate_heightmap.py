@@ -33,28 +33,31 @@ TMP_DIR      = os.path.join(SCRIPT_DIR, "tmp_tiles")
 
 TILE_LIST_URL = "https://copernicus-dem-90m.s3.amazonaws.com/tileList.txt"
 TILE_BASE_URL = "https://copernicus-dem-90m.s3.amazonaws.com"
+
+# ── 이진화 높이 설정 ──────────────────────────────────────────
+# Unity Terrain Height = 2000m 기준
+# 해저: 5% = 100m  (배 스폰 위치보다 낮아야 함)
+# 절벽: 100% = 2000m
+# 해수면: 25% = 500m  (해저 100m ~ 절벽 2000m 사이)
+_SEA_RATIO   = 0.05
+_LAND_RATIO  = 1.00
+SEA_LEVEL_RATIO = 0.25
 # ─────────────────────────────────────────────────────────────
 
 
-def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
+def binarize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
     """
-    float32 고도 배열을 정규화하고 target_size 로 리샘플링해 uint16 반환.
+    float32 고도 배열을 이진화 후 target_size로 리샘플링해 uint16 반환.
 
-    Args:
-        data: 2D float32 배열 (임의 고도 범위)
-        target_size: (height, width) 출력 픽셀 수
+    바다(고도 ≤ 0) → _SEA_RATIO  (낮은 해저)
+    육지(고도 > 0) → _LAND_RATIO (절벽 최대 높이)
 
-    Returns:
-        2D uint16 배열, 값 범위 0~65535
+    NEAREST 리샘플링으로 이진 경계를 보존 (LANCZOS는 경계를 흐릿하게 만듦).
     """
-    min_val = float(data.min())
-    max_val = float(data.max())
-    span = (max_val - min_val) or 1.0
+    binary = np.where(data > 0, _LAND_RATIO, _SEA_RATIO).astype(np.float32)
 
-    normalized = ((data - min_val) / span).astype(np.float32)
-
-    img = Image.fromarray(normalized, mode='F')
-    img = img.resize((target_size[1], target_size[0]), Image.LANCZOS)
+    img = Image.fromarray(binary, mode='F')
+    img = img.resize((target_size[1], target_size[0]), Image.NEAREST)
     resampled = np.array(img, dtype=np.float32)
 
     return (np.clip(resampled, 0.0, 1.0) * 65535).astype(np.uint16)
@@ -154,11 +157,14 @@ def from_geotiff(input_tif: str) -> np.ndarray:
 
 
 def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
-    """2D float32 고도 배열을 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
+    """2D float32 고도 배열을 이진화 후 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
     min_val, max_val = float(data.min()), float(data.max())
+    land_count = int(np.sum(data > 0))
+    sea_count  = int(np.sum(data <= 0))
     print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
+    print(f"이진화: 육지 {land_count}px (절벽) / 바다 {sea_count}px (해저)")
 
-    heightmap = normalize_and_resize(data, HEIGHTMAP_SIZE)
+    heightmap = binarize_and_resize(data, HEIGHTMAP_SIZE)
 
     os.makedirs(os.path.dirname(output_raw), exist_ok=True)
 
@@ -166,9 +172,8 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     heightmap.byteswap().tofile(output_raw)
     print(f"RAW 저장: {output_raw}")
 
-    UNITY_TERRAIN_H = 2000.0  # 시각적 과장 ×4 (실제 최대 ~2981m → Unity 2000m)
-    span = (max_val - min_val) or 1.0
-    sea_level_y = (-min_val / span) * UNITY_TERRAIN_H
+    UNITY_TERRAIN_H = 2000.0
+    sea_level_y = SEA_LEVEL_RATIO * UNITY_TERRAIN_H  # 0.25 × 2000 = 500m
 
     meta = (
         f"Width: {HEIGHTMAP_SIZE[1]}\n"
@@ -184,7 +189,7 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     print(f"\nUnity Import Raw 설정:")
     print(f"  Depth: 16 bit | Width: {HEIGHTMAP_SIZE[1]} | Height: {HEIGHTMAP_SIZE[0]}")
     print(f"  Byte Order: Mac | Terrain Size: 56000 x {int(UNITY_TERRAIN_H)} x 40000")
-    print(f"  해수면 Y: {sea_level_y:.2f}m")
+    print(f"  해수면 Y: {sea_level_y:.2f}m  (해저 {_SEA_RATIO*UNITY_TERRAIN_H:.0f}m ~ 절벽 {_LAND_RATIO*UNITY_TERRAIN_H:.0f}m)")
 
 
 def main() -> None:

@@ -46,10 +46,12 @@ namespace HormuzAI.Editor
                 return;
             }
 
-            var goalGO = GameObject.Find("GoalTrigger");
+            // 종료 트리거(End)를 ShipAgent의 goal 레퍼런스로 사용 — 거리 계산 기준
+            var goalGO = GameObject.Find("GoalTrigger_End");
             if (goalGO == null)
             {
-                Debug.LogError("[HormuzTrainingSetup] 'GoalTrigger' GameObject를 씬에서 찾지 못했습니다.");
+                Debug.LogError("[HormuzTrainingSetup] 'GoalTrigger_End' GameObject를 씬에서 찾지 못했습니다. " +
+                               "Hormuz > Build Scene을 먼저 실행하세요.");
                 return;
             }
 
@@ -67,6 +69,10 @@ namespace HormuzAI.Editor
             // agentsPerGeneration = 50
             var genMgrSO = new SerializedObject(genMgr);
             genMgrSO.FindProperty("agentsPerGeneration").intValue = 50;
+            genMgrSO.FindProperty("timeScale").floatValue = 10f;
+            genMgrSO.FindProperty("maxEpisodeGameSeconds").floatValue = 180f;
+            var bootstrapProp = genMgrSO.FindProperty("useStage1BootstrapDefaults");
+            if (bootstrapProp != null) bootstrapProp.boolValue = true;
             genMgrSO.ApplyModifiedProperties();
 
             // ── 4. AgentPopulator GO 생성 (이미 있으면 재사용) ──────────────

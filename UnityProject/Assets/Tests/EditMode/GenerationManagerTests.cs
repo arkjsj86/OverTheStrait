@@ -2,6 +2,7 @@ using NUnit.Framework;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using HormuzAI.Agent;
 using HormuzAI.Environment;
 
 namespace HormuzAI.Tests
@@ -42,9 +43,9 @@ namespace HormuzAI.Tests
         public void ReportEpisodeEnd_CountsGoalReached()
         {
             var gm = CreateGM(4);
-            gm.ReportEpisodeEnd(true,  1f);
-            gm.ReportEpisodeEnd(false, -0.5f);
-            gm.ReportEpisodeEnd(false, -0.1f);
+            gm.ReportEpisodeEnd("ShipAgent_000 [Korea]", EpisodeEndReason.GoalReached,  1f);
+            gm.ReportEpisodeEnd("ShipAgent_001 [Korea]", EpisodeEndReason.Collision,   -0.5f);
+            gm.ReportEpisodeEnd("ShipAgent_002 [Korea]", EpisodeEndReason.Timeout,     -0.1f);
 
             var bind = BindingFlags.NonPublic | BindingFlags.Instance;
             int goalCount = (int)typeof(GenerationManager)
@@ -56,9 +57,9 @@ namespace HormuzAI.Tests
         public void ReportEpisodeEnd_TracksBestReward()
         {
             var gm = CreateGM(4);
-            gm.ReportEpisodeEnd(false, -0.5f);
-            gm.ReportEpisodeEnd(true,   1f);
-            gm.ReportEpisodeEnd(false, -0.1f);
+            gm.ReportEpisodeEnd("ShipAgent_000 [Korea]", EpisodeEndReason.Collision,   -0.5f);
+            gm.ReportEpisodeEnd("ShipAgent_001 [Korea]", EpisodeEndReason.GoalReached,  1f);
+            gm.ReportEpisodeEnd("ShipAgent_002 [Korea]", EpisodeEndReason.Timeout,     -0.1f);
 
             var bind = BindingFlags.NonPublic | BindingFlags.Instance;
             float best = (float)typeof(GenerationManager)
@@ -67,11 +68,26 @@ namespace HormuzAI.Tests
         }
 
         [Test]
+        public void ReportEpisodeEnd_TracksRunBestMetadata()
+        {
+            var gm = CreateGM(4);
+            gm.ReportEpisodeEnd("ShipAgent_000 [Korea]", EpisodeEndReason.Collision,   -0.5f);
+            gm.ReportEpisodeEnd("ShipAgent_007 [Japan]", EpisodeEndReason.GoalReached,  1.25f);
+            gm.ReportEpisodeEnd("ShipAgent_002 [China]", EpisodeEndReason.Timeout,      0.2f);
+
+            Assert.IsTrue(gm.HasBestEpisode);
+            Assert.AreEqual(1.25f, gm.BestEpisodeScore, 0.0001f);
+            Assert.AreEqual(1, gm.BestEpisodeGeneration);
+            Assert.AreEqual("ShipAgent_007 [Japan]", gm.BestEpisodeAgentName);
+            Assert.AreEqual("Goal", gm.BestEpisodeEndReason);
+        }
+
+        [Test]
         public void EndGeneration_WritesCSVRow()
         {
             var gm = CreateGM(2, _tmpCsv);
-            gm.ReportEpisodeEnd(true,  1f);
-            gm.ReportEpisodeEnd(false, -0.5f);
+            gm.ReportEpisodeEnd("ShipAgent_000 [Korea]", EpisodeEndReason.GoalReached,  1f);
+            gm.ReportEpisodeEnd("ShipAgent_001 [Korea]", EpisodeEndReason.Collision,   -0.5f);
             // agentsPerGeneration=2 이므로 EndGeneration 자동 호출됨
 
             Assert.IsTrue(File.Exists(_tmpCsv), "CSV 파일이 생성되지 않음");
@@ -84,8 +100,8 @@ namespace HormuzAI.Tests
         public void EndGeneration_IncrementsGenerationNumber()
         {
             var gm = CreateGM(2, _tmpCsv);
-            gm.ReportEpisodeEnd(true,  1f);
-            gm.ReportEpisodeEnd(false, -0.5f);
+            gm.ReportEpisodeEnd("ShipAgent_000 [Korea]", EpisodeEndReason.GoalReached,  1f);
+            gm.ReportEpisodeEnd("ShipAgent_001 [Korea]", EpisodeEndReason.Collision,   -0.5f);
 
             var bind = BindingFlags.NonPublic | BindingFlags.Instance;
             int gen = (int)typeof(GenerationManager)

@@ -9,6 +9,7 @@ echo.
 echo  Config : config/hormuz_stage1.yaml
 echo  Run ID : hormuz_run1
 echo  GPU    : RTX 3070 Ti (CUDA)
+echo  Monitor: Training_Status_Monitor.bat hormuz_run1
 echo.
 
 set LEARN=venv_mlagents\Scripts\mlagents-learn.exe
@@ -57,6 +58,7 @@ goto :run_resume
 :run_fresh
 echo  Press Play in Unity when you see:
 echo  "Start training by pressing the Play button"
+echo  ** If "Restarting worker" appears: Stop then Play Unity again **
 echo ----------------------------------------
 echo.
 "%LEARN%" %CONFIG% --run-id=%RUN_ID%
@@ -65,6 +67,7 @@ goto :done
 :run_force
 echo  Press Play in Unity when you see:
 echo  "Start training by pressing the Play button"
+echo  ** If "Restarting worker" appears: Stop then Play Unity again **
 echo ----------------------------------------
 echo.
 "%LEARN%" %CONFIG% --run-id=%RUN_ID% --force
@@ -73,6 +76,7 @@ goto :done
 :run_resume
 echo  Press Play in Unity when you see:
 echo  "Start training by pressing the Play button"
+echo  ** If "Restarting worker" appears: Stop then Play Unity again **
 echo ----------------------------------------
 echo.
 "%LEARN%" %CONFIG% --run-id=%RUN_ID% --resume

@@ -51,6 +51,7 @@ UnityProject/results/
 
 # Git worktrees
 .worktrees/
+.claude/worktrees/
 
 # Python (for ML-Agents training scripts)
 __pycache__/
@@ -59,3 +60,8 @@ __pycache__/
 .env
 venv/
 venv_mlagents/
+
+# Keep the recommended headless build folder guide in repo
+!Builds/
+!Builds/WindowsHeadless/
+!Builds/WindowsHeadless/README.md

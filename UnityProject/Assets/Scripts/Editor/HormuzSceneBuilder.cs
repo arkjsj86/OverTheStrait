@@ -83,6 +83,8 @@ namespace HormuzAI.Editor
         private static void SetupTagsAndLayers()
         {
             EnsureTag("Goal");
+            EnsureTag("Gate1");
+            EnsureTag("Gate2");
             EnsureTag("Boundary");
             EnsureLayer("Water");
             EnsureLayer("Terrain");
@@ -199,7 +201,13 @@ namespace HormuzAI.Editor
             water.transform.localScale = new Vector3(TERRAIN_W / 10f, 1f, TERRAIN_D / 10f);
             water.transform.position   = new Vector3(TERRAIN_W / 2f, seaY, TERRAIN_D / 2f);
             water.layer = LayerMask.NameToLayer("Water");
+
+            // 기본 MeshCollider 제거 후 얇은 BoxCollider로 교체
+            // 섬 감지 레이캐스트(위→아래)에서 WaterPlane을 인식하기 위해 필요
             Object.DestroyImmediate(water.GetComponent<Collider>());
+            var waterCol    = water.AddComponent<BoxCollider>();
+            waterCol.size   = new Vector3(10f, 0.1f, 10f); // 로컬 좌표 — localScale 적용 후 맵 전체 커버
+            waterCol.center = Vector3.zero;
 
             var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"))
             {
@@ -245,14 +253,29 @@ namespace HormuzAI.Editor
 
         private static void CreateGoalTrigger(GameObject parent, float seaY)
         {
-            var goal = new GameObject("GoalTrigger");
-            goal.tag = "Goal";
-            goal.transform.SetParent(parent.transform);
-            goal.transform.position = new Vector3(55025f, seaY, 19025f);
+            // 종료 트리거 — 에피소드 +50 종료
+            CreateTrigger(parent, "GoalTrigger_End", "Goal",
+                new Vector3(55025f, seaY, 19025f), new Vector3(200f, 100f, 15000f));
 
-            var col = goal.AddComponent<BoxCollider>();
+            // 체크포인트 — +5, 에피소드는 계속 (에피소드당 1회만 지급)
+            CreateTrigger(parent, "GoalTrigger_1", "Gate1",
+                new Vector3(31157f, seaY, 26749f), new Vector3(200f, 100f, 15000f));
+
+            CreateTrigger(parent, "GoalTrigger_2", "Gate2",
+                new Vector3(40865f, seaY, 34195f), new Vector3(200f, 100f, 7000f));
+        }
+
+        private static void CreateTrigger(GameObject parent, string name, string tag,
+                                          Vector3 pos, Vector3 size)
+        {
+            var go = new GameObject(name);
+            go.tag = tag;
+            go.transform.SetParent(parent.transform);
+            go.transform.position = pos;
+
+            var col = go.AddComponent<BoxCollider>();
             col.isTrigger = true;
-            col.size = new Vector3(200f, 100f, 15000f);
+            col.size = size;
         }
 
         // ── BoundaryWalls ──────────────────────────────────
