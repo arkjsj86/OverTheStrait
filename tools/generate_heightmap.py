@@ -33,31 +33,28 @@ TMP_DIR      = os.path.join(SCRIPT_DIR, "tmp_tiles")
 
 TILE_LIST_URL = "https://copernicus-dem-90m.s3.amazonaws.com/tileList.txt"
 TILE_BASE_URL = "https://copernicus-dem-90m.s3.amazonaws.com"
-
-# ── 이진화 높이 설정 ──────────────────────────────────────────
-# Unity Terrain Height = 2000m 기준
-# 해저: 5% = 100m  (배 스폰 위치보다 낮아야 함)
-# 절벽: 100% = 2000m
-# 해수면: 25% = 500m  (해저 100m ~ 절벽 2000m 사이)
-_SEA_RATIO   = 0.05
-_LAND_RATIO  = 1.00
-SEA_LEVEL_RATIO = 0.25
 # ─────────────────────────────────────────────────────────────
 
 
-def binarize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
+def normalize_and_resize(data: np.ndarray, target_size: tuple) -> np.ndarray:
     """
-    float32 고도 배열을 이진화 후 target_size로 리샘플링해 uint16 반환.
+    float32 고도 배열을 정규화하고 target_size 로 리샘플링해 uint16 반환.
 
-    바다(고도 ≤ 0) → _SEA_RATIO  (낮은 해저)
-    육지(고도 > 0) → _LAND_RATIO (절벽 최대 높이)
+    Args:
+        data: 2D float32 배열 (임의 고도 범위)
+        target_size: (height, width) 출력 픽셀 수
 
-    NEAREST 리샘플링으로 이진 경계를 보존 (LANCZOS는 경계를 흐릿하게 만듦).
+    Returns:
+        2D uint16 배열, 값 범위 0~65535
     """
-    binary = np.where(data > 0, _LAND_RATIO, _SEA_RATIO).astype(np.float32)
+    min_val = float(data.min())
+    max_val = float(data.max())
+    span = (max_val - min_val) or 1.0
 
-    img = Image.fromarray(binary, mode='F')
-    img = img.resize((target_size[1], target_size[0]), Image.NEAREST)
+    normalized = ((data - min_val) / span).astype(np.float32)
+
+    img = Image.fromarray(normalized, mode='F')
+    img = img.resize((target_size[1], target_size[0]), Image.LANCZOS)
     resampled = np.array(img, dtype=np.float32)
 
     return (np.clip(resampled, 0.0, 1.0) * 65535).astype(np.uint16)
@@ -157,14 +154,34 @@ def from_geotiff(input_tif: str) -> np.ndarray:
 
 
 def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
-    """2D float32 고도 배열을 이진화 후 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
-    min_val, max_val = float(data.min()), float(data.max())
-    land_count = int(np.sum(data > 0))
-    sea_count  = int(np.sum(data <= 0))
-    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
-    print(f"이진화: 육지 {land_count}px (절벽) / 바다 {sea_count}px (해저)")
+    """2D float32 고도 배열을 Unity용 16-bit big-endian RAW + 메타데이터로 저장."""
+    # ── 해안선 이진화 전처리 ────────────────────────────────────────────────
+    # 해수면 ±5m 애매 영역을 제거해 배 콜라이더(반경 15m)와 터레인의 간헐적
+    # 관통 문제를 해소한다. Stage 2 수심 gradient는 상수 offset으로 보존.
+    # spec: docs/superpowers/specs/2026-04-16-heightmap-coast-binarization-design.md
+    COAST_THRESHOLD = 5.0   # 이하 = 바다로 취급 (DEM 수직 오차 + 리샘플링 여유)
+    LAND_LIFT       = 45.0  # 육지 +45m lift → Unity y≈30m (2000/3006 스케일, 콜라이더 15m + 마진 15m)
+    before_below = int(np.sum(data < COAST_THRESHOLD))
+    before_above = int(np.sum(data >= COAST_THRESHOLD))
+    data = np.where(data < COAST_THRESHOLD, 0.0, data + LAND_LIFT)
+    print(f"해안선 이진화: 바다 {before_below}px / 육지 {before_above}px (+{LAND_LIFT:.0f}m lift)")
+    # ──────────────────────────────────────────────────────────────────
 
-    heightmap = binarize_and_resize(data, HEIGHTMAP_SIZE)
+    min_val, max_val = float(data.min()), float(data.max())
+    print(f"고도 범위: {min_val:.1f}m ~ {max_val:.1f}m  |  입력 크기: {data.shape}")
+
+    heightmap = normalize_and_resize(data, HEIGHTMAP_SIZE)
+
+    # ── 리사이즈 후 재이진화 ────────────────────────────────────────────────
+    # LANCZOS 리샘플링이 해안선을 번지게 해 0 < h < LAND_LIFT 구간에 애매 픽셀이
+    # 생기는 것을 방지한다. 정규화된 uint16 공간에서 임계값을 환산해 재스냅한다.
+    # LAND_LIFT / max_val 비율을 기준으로: LAND_LIFT 미만 → 0 으로 클리핑
+    span = (max_val - min_val) or 1.0  # min_val=0 이므로 span=max_val
+    lift_threshold_u16 = int((LAND_LIFT / span) * 65535)
+    sea_mask_resized = heightmap < lift_threshold_u16
+    heightmap[sea_mask_resized] = 0
+    print(f"리사이즈 후 재이진화: threshold={lift_threshold_u16} (≈{LAND_LIFT:.0f}m / {span:.0f}m)")
+    # ──────────────────────────────────────────────────────────────────
 
     os.makedirs(os.path.dirname(output_raw), exist_ok=True)
 
@@ -172,8 +189,12 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     heightmap.byteswap().tofile(output_raw)
     print(f"RAW 저장: {output_raw}")
 
-    UNITY_TERRAIN_H = 2000.0
-    sea_level_y = SEA_LEVEL_RATIO * UNITY_TERRAIN_H  # 0.25 × 2000 = 500m
+    UNITY_TERRAIN_H = 2000.0  # Unity Terrain height 캡 (실제 최대 ~3006m → 2000/3006≈0.665× 압축)
+    span = (max_val - min_val) or 1.0
+    # 터레인 해저 바닥(Unity y=0)과 WaterPlane의 z-fighting 방지용 시각 offset.
+    # Spawn/Goal/WaterPlane 모두 meta 기준으로 배치되므로 일관되게 +1m 이동.
+    WATER_VISUAL_OFFSET = 1.0
+    sea_level_y = (-min_val / span) * UNITY_TERRAIN_H + WATER_VISUAL_OFFSET
 
     meta = (
         f"Width: {HEIGHTMAP_SIZE[1]}\n"
@@ -189,7 +210,7 @@ def convert_to_raw(data: np.ndarray, output_raw: str, output_meta: str) -> None:
     print(f"\nUnity Import Raw 설정:")
     print(f"  Depth: 16 bit | Width: {HEIGHTMAP_SIZE[1]} | Height: {HEIGHTMAP_SIZE[0]}")
     print(f"  Byte Order: Mac | Terrain Size: 56000 x {int(UNITY_TERRAIN_H)} x 40000")
-    print(f"  해수면 Y: {sea_level_y:.2f}m  (해저 {_SEA_RATIO*UNITY_TERRAIN_H:.0f}m ~ 절벽 {_LAND_RATIO*UNITY_TERRAIN_H:.0f}m)")
+    print(f"  해수면 Y: {sea_level_y:.2f}m")
 
 
 def main() -> None:

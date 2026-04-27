@@ -3,4 +3,4 @@ Height: 1025
 Bit Depth: 16
 Byte Order: Mac (big-endian)
 Terrain Height (Unity): 2000
-Sea Level Y (Unity): 500.00
+Sea Level Y (Unity): 1.00
