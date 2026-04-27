@@ -1,0 +1,65 @@
+{
+    "HormuzShip": {
+        "checkpoints": [
+            {
+                "steps": 78299951,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78299951.onnx",
+                "reward": 48.878431187735664,
+                "creation_time": 1776758470.3949294,
+                "auxillary_file_paths": [
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78299951.pt"
+                ]
+            },
+            {
+                "steps": 78349638,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78349638.onnx",
+                "reward": 39.21816394726435,
+                "creation_time": 1776758489.5452428,
+                "auxillary_file_paths": [
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78349638.pt"
+                ]
+            },
+            {
+                "steps": 78399684,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78399684.onnx",
+                "reward": 16.400815725326538,
+                "creation_time": 1776758509.878485,
+                "auxillary_file_paths": [
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78399684.pt"
+                ]
+            },
+            {
+                "steps": 78449670,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78449670.onnx",
+                "reward": 48.179328505809494,
+                "creation_time": 1776758527.484544,
+                "auxillary_file_paths": [
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78449670.pt"
+                ]
+            },
+            {
+                "steps": 78481285,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.onnx",
+                "reward": null,
+                "creation_time": 1776758543.3421884,
+                "auxillary_file_paths": [
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 78481285,
+            "file_path": "results\\hormuz_run1\\HormuzShip.onnx",
+            "reward": null,
+            "creation_time": 1776758543.3421884,
+            "auxillary_file_paths": [
+                "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "0.30.0",
+        "torch_version": "1.11.0+cu113"
+    }
+}

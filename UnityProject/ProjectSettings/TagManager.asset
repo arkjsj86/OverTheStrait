@@ -6,6 +6,8 @@ TagManager:
   tags:
   - Goal
   - Boundary
+  - Gate1
+  - Gate2
   layers:
   - Default
   - TransparentFX

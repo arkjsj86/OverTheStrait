@@ -1,15 +1,23 @@
 # Contract: Unity BehaviorParameters must match exactly
 #   Behavior Name                : HormuzShip
-#   Vector Observation Space Size: 9
+#   Vector Observation Space Size: 13
 #   Continuous Actions           : 2
 #   (See ShipAgent.cs CollectObservations for observation layout)
+#
+# 병렬 학습 설정 기준: agentCount=50, --num-envs=1
+#   --num-envs=5 추가 시 실질 250 에이전트 병렬
+#
+# 학습 실행 명령:
+#   mlagents-learn config/hormuz_stage1.yaml --run-id=hormuz_run1
+#   mlagents-learn config/hormuz_stage1.yaml --run-id=hormuz_run1 --num-envs=5
 behaviors:
   HormuzShip:
     trainer_type: ppo
     hyperparameters:
-      batch_size: 512
+      batch_size: 1024
       buffer_size: 10240
-      learning_rate: 3.0e-4
+      learning_rate: 5.0e-5
+      learning_rate_schedule: constant
       beta: 0.005
       epsilon: 0.2
       lambd: 0.95
@@ -20,10 +28,13 @@ behaviors:
       num_layers: 2
     reward_signals:
       extrinsic:
-        gamma: 0.95
+        gamma: 0.99
         strength: 1.0
-    max_steps: 500000
-    time_horizon: 256
-    summary_freq: 5000
+    max_steps: 200000000
+    time_horizon: 512
+    summary_freq: 10000
     checkpoint_interval: 50000
     keep_checkpoints: 5
+engine_settings:
+  time_scale: 15
+  no_graphics: false

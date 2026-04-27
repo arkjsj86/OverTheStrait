@@ -17,6 +17,7 @@ namespace HormuzAI.Editor
         // ── 경로 상수 ──────────────────────────────────────
         private const string SCENE_PATH       = "Assets/Scenes/HormuzStage1.unity";
         private const string TERRAIN_ASSET    = "Assets/Terrain/HormuzTerrainData.asset";
+        private const string TERRAIN_MAT      = "Assets/Terrain/TerrainMaterial.asset";
         private const string WATER_MAT_ASSET  = "Assets/Materials/WaterMaterial.mat";
         private const string HEIGHTMAP_RAW    = "Terrain/heightmap_hormuz.raw";   // Assets/ 상대
         private const string HEIGHTMAP_META   = "Terrain/heightmap_meta.txt";
@@ -27,6 +28,15 @@ namespace HormuzAI.Editor
         private const float TERRAIN_D  = 40000f;   // 40 km (Z)
         private const int   HM_RES     = 1025;     // heightmapResolution (2ⁿ + 1)
         // ───────────────────────────────────────────────────
+
+        [MenuItem("Hormuz/Clear Scene")]
+        public static void ClearScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            EditorSceneManager.SaveScene(scene, SCENE_PATH);
+            AssetDatabase.Refresh();
+            Debug.Log("[HormuzSceneBuilder] 씬 초기화 완료.");
+        }
 
         [MenuItem("Hormuz/Build Scene")]
         public static void BuildScene()
@@ -43,6 +53,7 @@ namespace HormuzAI.Editor
             CreateSpawnPoints(root, seaY);
             CreateGoalTrigger(root, seaY);
             CreateBoundaryWalls(root);
+            CreateOverviewCamera(root);
 
             EditorSceneManager.SaveScene(scene, SCENE_PATH);
             AssetDatabase.Refresh();
@@ -53,14 +64,27 @@ namespace HormuzAI.Editor
 
         private static void EnsureDirectories()
         {
-            string dataPath = Application.dataPath;
+            // AssetDatabase.CreateFolder 사용: 즉시 DB에 등록되므로
+            // 동일 호출 내에서 바로 AssetDatabase.CreateAsset 가능
             foreach (var rel in new[] { "Scenes", "Terrain", "Materials", "Scripts/Environment", "Scripts/Editor" })
-                Directory.CreateDirectory(Path.Combine(dataPath, rel));
+            {
+                string[] parts    = rel.Split('/');
+                string   current  = "Assets";
+                foreach (var part in parts)
+                {
+                    string next = current + "/" + part;
+                    if (!AssetDatabase.IsValidFolder(next))
+                        AssetDatabase.CreateFolder(current, part);
+                    current = next;
+                }
+            }
         }
 
         private static void SetupTagsAndLayers()
         {
             EnsureTag("Goal");
+            EnsureTag("Gate1");
+            EnsureTag("Gate2");
             EnsureTag("Boundary");
             EnsureLayer("Water");
             EnsureLayer("Terrain");
@@ -107,7 +131,8 @@ namespace HormuzAI.Editor
             };
             td.SetDetailResolution(512, 16);
 
-            if (File.Exists(Path.Combine(Application.dataPath, "..", TERRAIN_ASSET)))
+            // File.Exists 대신 AssetDatabase API 사용 (경로 정규화 문제 방지)
+            if (AssetDatabase.LoadAssetAtPath<TerrainData>(TERRAIN_ASSET) != null)
                 AssetDatabase.DeleteAsset(TERRAIN_ASSET);
             AssetDatabase.CreateAsset(td, TERRAIN_ASSET);
 
@@ -118,6 +143,24 @@ namespace HormuzAI.Editor
             terrainGO.layer = LayerMask.NameToLayer("Terrain");
 
             ImportHeightmap(td);
+            ApplyTerrainMaterial(terrainGO);
+        }
+
+        /// <summary>Terrain 컴포넌트에 모래색 material을 직접 지정한다.</summary>
+        private static void ApplyTerrainMaterial(GameObject terrainGO)
+        {
+            if (AssetDatabase.LoadAssetAtPath<Material>(TERRAIN_MAT) != null)
+                AssetDatabase.DeleteAsset(TERRAIN_MAT);
+
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"))
+            {
+                color = new Color(0.80f, 0.68f, 0.42f)   // 모래색
+            };
+            AssetDatabase.CreateAsset(mat, TERRAIN_MAT);
+            AssetDatabase.SaveAssets();
+
+            terrainGO.GetComponent<Terrain>().materialTemplate = mat;
+            Debug.Log("[HormuzSceneBuilder] 지형 모래색 material 적용 완료.");
         }
 
         private static void ImportHeightmap(TerrainData td)
@@ -143,6 +186,8 @@ namespace HormuzAI.Editor
                 }
 
             td.SetHeights(0, 0, heights);
+            EditorUtility.SetDirty(td);
+            AssetDatabase.SaveAssets();
             Debug.Log("[HormuzSceneBuilder] 하이트맵 임포트 완료.");
         }
 
@@ -156,13 +201,19 @@ namespace HormuzAI.Editor
             water.transform.localScale = new Vector3(TERRAIN_W / 10f, 1f, TERRAIN_D / 10f);
             water.transform.position   = new Vector3(TERRAIN_W / 2f, seaY, TERRAIN_D / 2f);
             water.layer = LayerMask.NameToLayer("Water");
+
+            // 기본 MeshCollider 제거 후 얇은 BoxCollider로 교체
+            // 섬 감지 레이캐스트(위→아래)에서 WaterPlane을 인식하기 위해 필요
             Object.DestroyImmediate(water.GetComponent<Collider>());
+            var waterCol    = water.AddComponent<BoxCollider>();
+            waterCol.size   = new Vector3(10f, 0.1f, 10f); // 로컬 좌표 — localScale 적용 후 맵 전체 커버
+            waterCol.center = Vector3.zero;
 
             var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"))
             {
-                color = new Color(0.08f, 0.37f, 0.68f, 1f)
+                color = new Color(0.0f, 0.55f, 0.85f, 1f)  // 밝은 청록색
             };
-            if (File.Exists(Path.Combine(Application.dataPath, "..", WATER_MAT_ASSET)))
+            if (AssetDatabase.LoadAssetAtPath<Material>(WATER_MAT_ASSET) != null)
                 AssetDatabase.DeleteAsset(WATER_MAT_ASSET);
             AssetDatabase.CreateAsset(mat, WATER_MAT_ASSET);
             water.GetComponent<Renderer>().sharedMaterial = mat;
@@ -202,14 +253,29 @@ namespace HormuzAI.Editor
 
         private static void CreateGoalTrigger(GameObject parent, float seaY)
         {
-            var goal = new GameObject("GoalTrigger");
-            goal.tag = "Goal";
-            goal.transform.SetParent(parent.transform);
-            goal.transform.position = new Vector3(55025f, seaY, 19025f);
+            // 종료 트리거 — 에피소드 +50 종료
+            CreateTrigger(parent, "GoalTrigger_End", "Goal",
+                new Vector3(55025f, seaY, 19025f), new Vector3(200f, 100f, 15000f));
 
-            var col = goal.AddComponent<BoxCollider>();
+            // 체크포인트 — +5, 에피소드는 계속 (에피소드당 1회만 지급)
+            CreateTrigger(parent, "GoalTrigger_1", "Gate1",
+                new Vector3(31157f, seaY, 26749f), new Vector3(200f, 100f, 15000f));
+
+            CreateTrigger(parent, "GoalTrigger_2", "Gate2",
+                new Vector3(40865f, seaY, 34195f), new Vector3(200f, 100f, 7000f));
+        }
+
+        private static void CreateTrigger(GameObject parent, string name, string tag,
+                                          Vector3 pos, Vector3 size)
+        {
+            var go = new GameObject(name);
+            go.tag = tag;
+            go.transform.SetParent(parent.transform);
+            go.transform.position = pos;
+
+            var col = go.AddComponent<BoxCollider>();
             col.isTrigger = true;
-            col.size = new Vector3(200f, 100f, 15000f);
+            col.size = size;
         }
 
         // ── BoundaryWalls ──────────────────────────────────
@@ -243,6 +309,30 @@ namespace HormuzAI.Editor
             wall.transform.SetParent(parent.transform);
             wall.transform.position = pos;
             wall.AddComponent<BoxCollider>().size = size;
+        }
+
+        // ── OverviewCamera ─────────────────────────────────────────────────
+
+        private static void CreateOverviewCamera(GameObject parent)
+        {
+            var camGO = new GameObject("OverviewCamera");
+            camGO.transform.SetParent(parent.transform);
+
+            var cam = camGO.AddComponent<Camera>();
+            cam.orthographic     = true;
+            cam.orthographicSize = 22000f;   // 세로 44km — 지형 40km 커버
+            cam.farClipPlane     = 15000f;
+            cam.backgroundColor  = new Color(0.02f, 0.05f, 0.10f);  // 거의 검정 — 씬 경계 밖
+            cam.clearFlags       = CameraClearFlags.SolidColor;
+            camGO.tag = "MainCamera";
+
+            // 지형 정중앙 상공, 수직 하향
+            // X: 56000/2=28000  Y: 12000  Z: 40000/2=20000
+            camGO.transform.SetPositionAndRotation(
+                new Vector3(TERRAIN_W / 2f, 12000f, TERRAIN_D / 2f),
+                Quaternion.Euler(90f, 0f, 0f));
+
+            Debug.Log("[HormuzSceneBuilder] OverviewCamera 생성 완료.");
         }
     }
 }

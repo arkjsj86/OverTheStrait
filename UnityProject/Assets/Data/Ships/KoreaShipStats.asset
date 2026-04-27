@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a28e8055cd2a0fb41a5580c1fe10d0fc, type: 3}
+  m_Name: KoreaShipStats
+  m_EditorClassIdentifier: HormuzAI::HormuzAI.Data.ShipStatsSO
+  maxSpeed: 3000
+  turnRate: 90
+  maxHealth: 100
+  shallowSpeedMult: 0.7
+  deepSpeedMult: 1.2
+  narrowTurnMult: 1.3
+  wideTurnMult: 1
+  damagedSpeedMult: 0.8
+  criticalSpeedMult: 0.5
