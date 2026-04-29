@@ -2,58 +2,58 @@
     "HormuzShip": {
         "checkpoints": [
             {
-                "steps": 78299951,
-                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78299951.onnx",
-                "reward": 48.878431187735664,
-                "creation_time": 1776758470.3949294,
+                "steps": 129549870,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-129549870.onnx",
+                "reward": 42.555315809249876,
+                "creation_time": 1777437629.8652723,
                 "auxillary_file_paths": [
-                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78299951.pt"
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-129549870.pt"
                 ]
             },
             {
-                "steps": 78349638,
-                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78349638.onnx",
-                "reward": 39.21816394726435,
-                "creation_time": 1776758489.5452428,
+                "steps": 129599883,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-129599883.onnx",
+                "reward": 49.419871526605945,
+                "creation_time": 1777437650.7865179,
                 "auxillary_file_paths": [
-                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78349638.pt"
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-129599883.pt"
                 ]
             },
             {
-                "steps": 78399684,
-                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78399684.onnx",
-                "reward": 16.400815725326538,
-                "creation_time": 1776758509.878485,
+                "steps": 129649748,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-129649748.onnx",
+                "reward": 70.44815063476562,
+                "creation_time": 1777437669.9824016,
                 "auxillary_file_paths": [
-                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78399684.pt"
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-129649748.pt"
                 ]
             },
             {
-                "steps": 78449670,
-                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78449670.onnx",
-                "reward": 48.179328505809494,
-                "creation_time": 1776758527.484544,
+                "steps": 129699847,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-129699847.onnx",
+                "reward": 32.81176137924194,
+                "creation_time": 1777437687.3322678,
                 "auxillary_file_paths": [
-                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78449670.pt"
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-129699847.pt"
                 ]
             },
             {
-                "steps": 78481285,
-                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.onnx",
+                "steps": 129719409,
+                "file_path": "results\\hormuz_run1\\HormuzShip\\HormuzShip-129719409.onnx",
                 "reward": null,
-                "creation_time": 1776758543.3421884,
+                "creation_time": 1777437694.7843595,
                 "auxillary_file_paths": [
-                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.pt"
+                    "results\\hormuz_run1\\HormuzShip\\HormuzShip-129719409.pt"
                 ]
             }
         ],
         "final_checkpoint": {
-            "steps": 78481285,
+            "steps": 129719409,
             "file_path": "results\\hormuz_run1\\HormuzShip.onnx",
             "reward": null,
-            "creation_time": 1776758543.3421884,
+            "creation_time": 1777437694.7843595,
             "auxillary_file_paths": [
-                "results\\hormuz_run1\\HormuzShip\\HormuzShip-78481285.pt"
+                "results\\hormuz_run1\\HormuzShip\\HormuzShip-129719409.pt"
             ]
         }
     },
